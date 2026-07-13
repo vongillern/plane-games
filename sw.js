@@ -1,4 +1,4 @@
-const CACHE = 'am-hub-v1';
+const CACHE = 'am-hub-v2';
 const ASSETS = [
   './',
   './style.css',
@@ -8,6 +8,8 @@ const ASSETS = [
   './icon-maskable-512.png',
   './games/2048/icon-192.png',
   './games/drop/icon-192.png',
+  './games/snake/icon-192.png',
+  './games/glide/icon-192.png',
 ];
 
 self.addEventListener('install', (e) => {

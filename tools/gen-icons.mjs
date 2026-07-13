@@ -155,6 +155,34 @@ function helixLayers(t) {
   ];
 }
 
+function snakeLayers(t) {
+  // sinuous snake: overlapping circles along an S-curve, tapering to the tail
+  const layers = [];
+  const N = 26;
+  const pos = (k) => [126 + k * 250, 286 + 66 * Math.sin(k * 5.8 - 0.9)];
+  for (let i = 0; i < N; i++) {
+    const k = i / (N - 1);                       // 0 = tail, 1 = head
+    const [x, y] = pos(k);
+    const r = 24 + k * 24;
+    layers.push({ sdf: sdCircle(t(x), t(y), t(r)), color: solid('#ffffff') });
+  }
+  const [hx, hy] = pos(1);
+  layers.push({ sdf: sdCircle(t(hx + 14), t(hy - 16), t(10)), color: solid('#0b4634') });
+  // food dot in the open corner
+  layers.push({ sdf: sdCircle(t(146), t(136), t(32)), color: gradient('#fff7f0', '#ffd9a8', t(120), t(110), t(172), t(162)) });
+  return layers;
+}
+function glideLayers(t) {
+  // paper dart gliding through a gap between two pillars
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  return [
+    { sdf: sdRoundRect(t(388), t(96), t(44), t(96), t(24)), color: solid('#ffffff', 70) },   // top pillar
+    { sdf: sdRoundRect(t(388), t(416), t(44), t(96), t(24)), color: solid('#ffffff', 70) },  // bottom pillar
+    { sdf: p([[96, 300], [352, 232], [220, 322]]), color: solid('#ffffff') },                // upper wing
+    { sdf: p([[220, 322], [352, 232], [268, 352]]), color: solid('#ffffff', 200) },          // lower wing
+  ];
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -164,6 +192,12 @@ const APPS = [
   },
   {
     dir: 'games/drop', bg0: '#131629', bg1: '#312a6e', art: helixLayers,
+  },
+  {
+    dir: 'games/snake', bg0: '#0b4634', bg1: '#34d399', art: snakeLayers,
+  },
+  {
+    dir: 'games/glide', bg0: '#6e1f38', bg1: '#fb7185', art: glideLayers,
   },
 ];
 

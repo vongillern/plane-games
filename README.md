@@ -9,6 +9,8 @@ subways, and dead zones. Pure static files: no build step, no frameworks, no net
 |---|---|---|
 | **2048** | Slide, merge, chase the golden tile | `games/2048/` |
 | **Drop** | Helix-jump-style 3D descent (Three.js) | `games/drop/` |
+| **Snake** | Silky-smooth modern snake | `games/snake/` |
+| **Glide** | One-tap paper-plane night flight | `games/glide/` |
 
 The hub and **each game is its own installable PWA** — visit any of them and
 "Add to Home Screen" to install just that game, or install the hub for all of them.

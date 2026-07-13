@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Snake</title>
+  <meta name="theme-color" content="#0a1410" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="A smooth, offline Snake." />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Snake" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- avoid flash of unstyled background -->
+  <style>html{background:#0a0a0f}</style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="title-row">
+        <h1 class="title">Snake</h1>
+        <div class="stats">
+          <div class="chip">
+            <span class="chip-label">Score</span>
+            <span class="chip-value" id="score">0</span>
+          </div>
+          <div class="chip">
+            <span class="chip-label">Best</span>
+            <span class="chip-value" id="best">0</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="board-wrap">
+      <div class="board" id="board" role="application" aria-label="Snake board" tabindex="0">
+        <canvas id="canvas"></canvas>
+        <div class="overlay" id="overlay">
+          <div class="overlay-card">
+            <div class="overlay-title" id="overlay-title">Snake</div>
+            <div class="overlay-sub" id="overlay-sub">swipe to steer</div>
+            <div class="overlay-hint" id="overlay-hint">tap to start</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <p class="hint">Swipe on the board or use arrow keys / WASD.</p>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

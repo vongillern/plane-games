@@ -33,6 +33,8 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
   - Hub: `#7c5cff` (violet)
   - 2048: `#f5a623` (warm amber/gold)
   - Drop: `#22d3ee` (electric cyan) on violet-tinted depth fog
+  - Snake: `#34d399` (emerald)
+  - Glide: `#fb7185` (coral/rose)
 - Big type, heavy weights (700–800), tight letter-spacing (-0.02em) for titles.
 - Cards/surfaces: `--radius` corners, 1px `--border`, subtle top-light gradient.
 - Glow sparingly: `box-shadow: 0 0 40px -8px <accent at ~35%>` on the hero element only.

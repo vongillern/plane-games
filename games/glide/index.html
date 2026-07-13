@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Glide</title>
+  <meta name="theme-color" content="#170b10" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="A serene night-flight paper plane game. Fully offline." />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Glide" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- avoid flash of unstyled background -->
+  <style>html{background:#0a0a0f}</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+
+    <!-- In-play score -->
+    <div class="score" id="score" aria-live="polite">0</div>
+
+    <!-- Start overlay -->
+    <div class="overlay" id="start-overlay">
+      <div class="overlay-card">
+        <h1 class="title">Glide</h1>
+        <p class="tagline">tap to stay aloft</p>
+        <div class="hint-row">
+          <span class="key">Tap</span>
+          <span class="key">Click</span>
+          <span class="key">Space</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="over-overlay" hidden>
+      <div class="overlay-card">
+        <p class="over-label">Grounded</p>
+        <div class="scoreboard">
+          <div class="stat">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="final-score">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value" id="best-score">0</span>
+          </div>
+        </div>
+        <p class="new-best" id="new-best" hidden>New best</p>
+        <button class="btn btn-primary" id="restart" type="button">Fly again</button>
+        <p class="restart-hint">tap, Space or R to restart</p>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
