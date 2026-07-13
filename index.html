@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" style="background:#0a0a0f">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Airplane Mode</title>
+<meta name="description" content="A collection of beautiful games that work entirely offline.">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Airplane Mode">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<main>
+  <header>
+    <div class="mark" aria-hidden="true">
+      <img src="./icon-192.png" alt="" width="72" height="72">
+    </div>
+    <h1>Airplane Mode</h1>
+    <p class="tagline">Beautiful games. No internet required.</p>
+  </header>
+
+  <nav class="games" aria-label="Games">
+    <a class="card card-2048" href="./games/2048/">
+      <img src="./games/2048/icon-192.png" alt="" width="64" height="64">
+      <div class="card-text">
+        <h2>2048</h2>
+        <p>Slide. Merge. Chase the golden tile.</p>
+      </div>
+      <span class="chevron" aria-hidden="true">›</span>
+    </a>
+
+    <a class="card card-drop" href="./games/drop/">
+      <img src="./games/drop/icon-192.png" alt="" width="64" height="64">
+      <div class="card-text">
+        <h2>Drop</h2>
+        <p>Spin the tower. Fall forever.</p>
+      </div>
+      <span class="chevron" aria-hidden="true">›</span>
+    </a>
+  </nav>
+
+  <footer>
+    <p><span class="dot" aria-hidden="true"></span> Works fully offline — add it to your home screen</p>
+  </footer>
+</main>
+<script>
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+}
+</script>
+</body>
+</html>

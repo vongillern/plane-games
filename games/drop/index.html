@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Drop</title>
+  <meta name="theme-color" content="#131629" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Drop" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud" class="hud">
+    <div id="score" class="score" aria-live="polite">0</div>
+    <div id="best" class="best-chip">BEST <span id="bestVal">0</span></div>
+  </div>
+
+  <div id="start" class="overlay">
+    <div class="panel">
+      <h1 class="title">Drop</h1>
+      <p class="hint">drag to rotate the tower</p>
+      <div class="cta">tap to start</div>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="panel">
+      <p class="over-label">score</p>
+      <div id="overScore" class="over-score">0</div>
+      <p class="over-best">best <span id="overBest">0</span></p>
+      <div class="cta">tap to play again</div>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
