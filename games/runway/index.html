@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Runway</title>
+  <meta name="theme-color" content="#2a0f31" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="A neon-dusk airport dash. Fully offline." />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Runway" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- avoid flash of unstyled background -->
+  <style>html{background:#0a0a0f}</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="scene"></canvas>
+
+    <!-- In-play HUD -->
+    <div class="hud" id="hud">
+      <div class="distance" id="distance" aria-live="polite">0<span class="unit">m</span></div>
+      <div class="miles-chip" id="miles-chip">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 8L2 15l10 5 10-5-10-5Z" fill="currentColor"/></svg>
+        <span id="miles">0</span>
+      </div>
+      <div class="magnet-pip" id="magnet-pip" hidden>
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3H6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        <span id="magnet-time">6</span>
+      </div>
+    </div>
+
+    <!-- Start overlay -->
+    <div class="overlay" id="start-overlay">
+      <div class="overlay-card">
+        <h1 class="title">Runway</h1>
+        <p class="tagline"><span class="if-touch">swipe to dodge · jump · slide</span><span class="if-key">← → to dodge · ↑ jump · ↓ slide</span></p>
+        <div class="cta"><span class="if-touch">tap to start</span><span class="if-key">press Space to start</span></div>
+        <button class="install-btn" id="install" type="button" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Add to Home Screen</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="over-overlay" hidden>
+      <div class="overlay-card">
+        <p class="over-label">Grounded</p>
+        <div class="scoreboard">
+          <div class="stat">
+            <span class="stat-label">Distance</span>
+            <span class="stat-value" id="final-distance">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Miles</span>
+            <span class="stat-value" id="final-miles">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value" id="best-score">0</span>
+          </div>
+        </div>
+        <p class="new-best" id="new-best" hidden>New best</p>
+        <button class="btn btn-primary" id="restart" type="button">Run again</button>
+        <p class="restart-hint"><span class="if-touch">or tap anywhere</span><span class="if-key">Space or R to restart</span></p>
+      </div>
+    </div>
+
+    <div class="install-tip" id="install-tip" hidden>
+      <div class="install-tip-card">
+        <p>Install this app: tap the <strong>Share</strong> button
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        in your browser, then <strong>Add to Home Screen</strong>.</p>
+        <button class="btn" id="install-tip-close" type="button">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

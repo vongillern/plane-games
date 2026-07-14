@@ -183,6 +183,38 @@ function glideLayers(t) {
   ];
 }
 
+function bridgeLayers(t) {
+  // suspension bridge: catenary cable band, two towers, road deck
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  return [
+    { sdf: p([[150, 186], [256, 322], [362, 186], [362, 202], [256, 338], [150, 202]]), color: solid('#ffffff', 150) },
+    { sdf: sdRoundRect(t(150), t(272), t(15), t(98), t(11)), color: solid('#ffffff', 225) },
+    { sdf: sdRoundRect(t(362), t(272), t(15), t(98), t(11)), color: solid('#ffffff', 225) },
+    { sdf: sdRoundRect(t(256), t(364), t(192), t(15), t(13)), color: solid('#ffffff') },
+  ];
+}
+function runwayLayers(t) {
+  // runway receding to the horizon with center dashes
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  const layers = [
+    { sdf: p([[213, 122], [299, 122], [404, 452], [108, 452]]), color: solid('#ffffff', 44) },
+  ];
+  const dashes = [[146, 9, 22], [200, 12, 30], [264, 16, 40], [342, 21, 52]];
+  for (const [y, hw, hh] of dashes) {
+    layers.push({ sdf: sdRoundRect(t(256), t(y + hh), t(hw), t(hh), t(hw * 0.8)), color: solid('#ffffff', 235) });
+  }
+  return layers;
+}
+function hopLayers(t) {
+  // bouncy ball climbing staggered platforms
+  return [
+    { sdf: sdRoundRect(t(150), t(198), t(56), t(13), t(13)), color: solid('#ffffff', 90) },
+    { sdf: sdRoundRect(t(356), t(294), t(66), t(14), t(14)), color: solid('#ffffff', 145) },
+    { sdf: sdRoundRect(t(168), t(394), t(84), t(16), t(16)), color: solid('#ffffff', 235) },
+    { sdf: sdCircle(t(168), t(308), t(46)), color: gradient('#ffffff', '#eaffcf', t(130), t(270), t(208), t(348)) },
+  ];
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -198,6 +230,15 @@ const APPS = [
   },
   {
     dir: 'games/glide', bg0: '#6e1f38', bg1: '#fb7185', art: glideLayers,
+  },
+  {
+    dir: 'games/span', bg0: '#14284f', bg1: '#3b82f6', art: bridgeLayers,
+  },
+  {
+    dir: 'games/runway', bg0: '#3b0a45', bg1: '#d946ef', art: runwayLayers,
+  },
+  {
+    dir: 'games/hop', bg0: '#1b3f22', bg1: '#84cc16', art: hopLayers,
   },
 ];
 
