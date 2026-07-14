@@ -1,4 +1,4 @@
-const CACHE = 'am-2048-v2';
+const CACHE = 'am-2048-v3';
 
 const ASSETS = [
   './',

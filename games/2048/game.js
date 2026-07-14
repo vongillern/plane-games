@@ -1,7 +1,8 @@
 // 2048 — offline PWA. Vanilla ES module.
 
 const SIZE = 4;
-const SLIDE_MS = 120;
+const SLIDE_MS = 150;        // tile slide duration — matches --anim-slide in style.css
+const SPAWN_DELAY_MS = 100;  // pause after a slide lands before the new tile appears
 const BEST_KEY = 'am.2048.best';
 const WIN_VALUE = 2048;
 
@@ -32,8 +33,6 @@ const tilesEl = document.getElementById('tiles');
 const scoreEl = document.getElementById('score');
 const bestEl = document.getElementById('best');
 const scoreChipEl = scoreEl.closest('.chip');
-const undoBtn = document.getElementById('undo');
-const newGameBtn = document.getElementById('new-game');
 const overlayEl = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlaySub = document.getElementById('overlay-sub');
@@ -52,9 +51,9 @@ let tiles;        // Map id -> tile
 let score;
 let best;
 let won;          // player crossed 2048 and chose to keep going (or dismissed)
-let animating;
+let animating;    // a slide/merge is currently in flight — new moves get queued
 let uid;
-let undoSnapshot; // { grid, score, won } | null
+let queuedDir;    // one pending direction queued while animating, or null
 
 const VECTORS = {
   left:  { x: -1, y: 0 },
@@ -107,6 +106,11 @@ function makeTile(value, x, y, isNew) {
   tilesEl.appendChild(el);
   tiles.set(id, tile);
   cells[y][x] = tile;
+  if (isNew) {
+    // self-cleaning: strip the one-shot class once its spawn animation
+    // finishes so it never fights a later merge-pop on the same element
+    inner.addEventListener('animationend', () => el.classList.remove('tile-new'), { once: true });
+  }
   return tile;
 }
 
@@ -138,9 +142,8 @@ function reset() {
   won = false;
   animating = false;
   uid = 0;
-  undoSnapshot = null;
+  queuedDir = null;
   updateScore(0, false);
-  updateUndoButton();
   hideOverlay();
   spawnTile();
   spawnTile();
@@ -164,7 +167,10 @@ function updateScore(newScore, animate) {
     bestEl.textContent = best;
     saveBest();
   }
-  if (animate && gain > 0) floatScore(gain);
+  if (animate && gain > 0) {
+    floatScore(gain);
+    bumpChip();
+  }
 }
 
 function floatScore(gain) {
@@ -175,31 +181,10 @@ function floatScore(gain) {
   f.addEventListener('animationend', () => f.remove(), { once: true });
 }
 
-// ---- Undo -----------------------------------------------------------------
-function snapshot() {
-  const grid = cells.map(row => row.map(t => (t ? t.value : 0)));
-  return { grid, score, won };
-}
-
-function updateUndoButton() {
-  undoBtn.disabled = !undoSnapshot || animating;
-}
-
-function undo() {
-  if (!undoSnapshot || animating) return;
-  const snap = undoSnapshot;
-  undoSnapshot = null;
-  tilesEl.replaceChildren();
-  cells = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
-  tiles = new Map();
-  for (let y = 0; y < SIZE; y++)
-    for (let x = 0; x < SIZE; x++)
-      if (snap.grid[y][x]) makeTile(snap.grid[y][x], x, y, false);
-  score = -1;             // force textContent refresh via updateScore
-  updateScore(snap.score, false);
-  won = snap.won;
-  hideOverlay();
-  updateUndoButton();
+function bumpChip() {
+  scoreChipEl.classList.remove('chip-bump');
+  void scoreChipEl.offsetWidth; // reflow so the animation restarts on rapid merges
+  scoreChipEl.classList.add('chip-bump');
 }
 
 // ---- Movement -------------------------------------------------------------
@@ -222,11 +207,15 @@ function findFarthest(x, y, v) {
 }
 
 function move(dir) {
-  if (animating) return;
+  if (animating) {
+    // never drop input mid-animation: keep only the latest queued move
+    // and fast-forward into it the instant the current slide lands
+    queuedDir = dir;
+    return;
+  }
   const v = VECTORS[dir];
   const { xs, ys } = buildTraversals(v);
 
-  const pre = snapshot();     // capture before mutation for undo
   let moved = false;
   let gain = 0;
   const toRemove = [];        // incoming tiles absorbed by a merge
@@ -266,10 +255,10 @@ function move(dir) {
   if (!moved) return;
 
   animating = true;
-  undoSnapshot = pre;
-  updateUndoButton();
 
-  // trigger slide
+  // trigger the slide: tile positions already mutated above, so re-placing
+  // every tile now animates them (via the transform transition) from their
+  // old screen position to their new one
   for (const tile of tiles.values()) placeTile(tile);
 
   if (gain > 0) {
@@ -278,7 +267,7 @@ function move(dir) {
   }
 
   window.setTimeout(() => {
-    // finalize merges
+    // slide has landed: finalize merges (pop survivors, drop absorbed tiles)
     for (const s of mergedSurvivors) {
       s.value = s.pendingValue;
       s.pendingValue = null;
@@ -289,14 +278,31 @@ function move(dir) {
       s.el.classList.add('tile-merged');
     }
     for (const t of toRemove) removeTile(t);
-    // strip one-shot spawn/merge classes that have finished
-    for (const tile of tiles.values()) tile.el.classList.remove('tile-new');
-
-    spawnTile();
 
     animating = false;
-    updateUndoButton();
-    checkEnd(mergedSurvivors);
+
+    const justWon = !won && mergedSurvivors.some(s => s.value >= WIN_VALUE);
+    if (justWon) {
+      won = true;
+      showWin();
+    }
+
+    // the moment the board has landed, let a queued move fast-forward in —
+    // this is what keeps rapid play feeling snappy instead of laggy
+    if (queuedDir) {
+      const d = queuedDir;
+      queuedDir = null;
+      move(d);
+    }
+
+    // the new tile appears a beat after the slide lands, not instantly
+    window.setTimeout(() => {
+      spawnTile();
+      if (!justWon && !movesAvailable()) {
+        navigator.vibrate?.(30);
+        showGameOver();
+      }
+    }, SPAWN_DELAY_MS);
   }, SLIDE_MS);
 }
 
@@ -320,18 +326,6 @@ function movesAvailable() {
   return false;
 }
 
-function checkEnd(mergedSurvivors) {
-  if (!won && mergedSurvivors.some(s => s.value >= WIN_VALUE)) {
-    won = true;
-    showWin();
-    return;
-  }
-  if (!movesAvailable()) {
-    navigator.vibrate?.(30);
-    showGameOver();
-  }
-}
-
 // ---- Overlay --------------------------------------------------------------
 function hideOverlay() {
   overlayEl.hidden = true;
@@ -351,8 +345,7 @@ function showWin() {
   overlayTitle.textContent = 'You win';
   overlaySub.textContent = 'You reached 2048.';
   overlayActions.replaceChildren(
-    overlayButton('Keep going', false, hideOverlay),
-    overlayButton('New Game', true, reset),
+    overlayButton('Keep going', true, hideOverlay),
   );
   overlayEl.hidden = false;
 }
@@ -384,14 +377,6 @@ window.addEventListener('keydown', (e) => {
   if (dir) {
     e.preventDefault();
     move(dir);
-    return;
-  }
-  if (e.key === 'r' || e.key === 'R') {
-    e.preventDefault();
-    reset();
-  } else if (e.key === 'z' || e.key === 'Z') {
-    e.preventDefault();
-    undo();
   }
 });
 
@@ -427,14 +412,34 @@ boardEl.addEventListener('pointercancel', () => { ptr = null; });
 boardEl.addEventListener('dblclick', (e) => e.preventDefault());
 boardEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// ---- Buttons --------------------------------------------------------------
-newGameBtn.addEventListener('click', reset);
-undoBtn.addEventListener('click', undo);
-
 // ---- Boot -----------------------------------------------------------------
 best = loadBest();
 bestEl.textContent = best;
 reset();
+
+// tiny test hook: lets headless tests force a near-full grid to reach
+// game-over quickly without playing out a full game. Harmless in production.
+window.__test = {
+  forceNearFull() {
+    tilesEl.replaceChildren();
+    cells = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    tiles = new Map();
+    uid = 0;
+    // 15 pairwise-distinct sentinel values (never equal each other, or a
+    // freshly-spawned 2/4) with a single gap at (0,0). A single "left" move
+    // shifts every row flush and lands the last empty cell where nothing
+    // can ever merge again, so the very next spawn ends the game.
+    let v = 101;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        if (x === 0 && y === 0) continue;
+        makeTile(v++, x, y, false);
+      }
+    }
+    queuedDir = null;
+    animating = false;
+  },
+};
 
 // ---- Service worker -------------------------------------------------------
 if ('serviceWorker' in navigator) {
@@ -442,3 +447,32 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
+
+// ---- Install prompt ---------------------------------------------------
+(() => {
+  const btn = document.getElementById('install');
+  const tip = document.getElementById('install-tip');
+  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferred = e;
+    btn.hidden = false;
+  });
+  if (isIOS) btn.hidden = false;
+  btn.addEventListener('click', async () => {
+    if (deferred) {
+      deferred.prompt();
+      const { outcome } = await deferred.userChoice;
+      if (outcome === 'accepted') btn.hidden = true;
+      deferred = null;
+    } else {
+      tip.hidden = false;
+    }
+  });
+  document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
+  tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
+  window.addEventListener('appinstalled', () => { btn.hidden = true; });
+})();

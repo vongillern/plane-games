@@ -18,7 +18,7 @@
   --gap: calc(var(--board-size) * 0.03);
   --pad: var(--gap);
   --cell: calc((var(--board-size) - var(--pad) * 2 - var(--gap) * 3) / 4);
-  --anim-slide: 120ms;
+  --anim-slide: 150ms;
 }
 
 * {
@@ -63,12 +63,6 @@ body {
 /* ---------- Header ---------- */
 .header {
   width: var(--board-size);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -117,11 +111,6 @@ body {
   font-size: 20px;
   font-weight: 700;
   line-height: 1.1;
-}
-
-.controls {
-  display: flex;
-  gap: 10px;
 }
 
 .btn {
@@ -234,7 +223,7 @@ body {
 }
 
 .tile-new .tile-inner {
-  animation: spawn 180ms var(--ease-spring) both;
+  animation: spawn 160ms var(--ease-spring) both;
 }
 
 .tile-merged .tile-inner {
@@ -242,13 +231,24 @@ body {
 }
 
 @keyframes spawn {
-  0% { transform: scale(0); opacity: 0; }
+  0% { transform: scale(0.4); opacity: 0; }
   100% { transform: scale(1); opacity: 1; }
 }
 
 @keyframes pop {
   0% { transform: scale(1); }
   40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- Score chip bump ---------- */
+.chip-bump {
+  animation: chip-bump 200ms var(--ease-spring) both;
+}
+
+@keyframes chip-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08); }
   100% { transform: scale(1); }
 }
 
@@ -349,12 +349,89 @@ body {
   .hint { display: none; }
 }
 
+/* ---------- Install button ---------- */
+.install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 120ms var(--ease-out), border-color 120ms var(--ease-out), background-color 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+
+.install-btn:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, .18);
+  background: var(--surface);
+}
+
+.install-btn:active {
+  transform: scale(0.96);
+}
+
+.install-btn[hidden] {
+  display: none;
+}
+
+.install-tip {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .6);
+  padding:
+    calc(env(safe-area-inset-top) + 16px)
+    calc(env(safe-area-inset-right) + 16px)
+    calc(env(safe-area-inset-bottom) + 16px)
+    calc(env(safe-area-inset-left) + 16px);
+  animation: fade 200ms var(--ease-out) both;
+}
+
+.install-tip[hidden] {
+  display: none;
+}
+
+.install-tip-card {
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.install-tip-card p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.install-tip-card svg {
+  vertical-align: -2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tile { transition-duration: 1ms; }
   .tile-new .tile-inner,
   .tile-merged .tile-inner,
   .overlay,
   .overlay-card,
+  .install-tip,
+  .chip-bump,
   .score-float { animation-duration: 1ms; }
 }
 

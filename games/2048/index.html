@@ -25,27 +25,16 @@
 <body>
   <div class="app">
     <header class="header">
-      <div class="title-row">
-        <h1 class="title">2048</h1>
-        <div class="stats">
-          <div class="chip">
-            <span class="chip-label">Score</span>
-            <span class="chip-value" id="score">0</span>
-          </div>
-          <div class="chip">
-            <span class="chip-label">Best</span>
-            <span class="chip-value" id="best">0</span>
-          </div>
+      <h1 class="title">2048</h1>
+      <div class="stats">
+        <div class="chip">
+          <span class="chip-label">Score</span>
+          <span class="chip-value" id="score">0</span>
         </div>
-      </div>
-      <div class="controls">
-        <button class="btn" id="undo" type="button" aria-label="Undo last move" disabled>
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M9 7 4 12l5 5M4 12h11a4 4 0 0 1 0 8h-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span>Undo</span>
-        </button>
-        <button class="btn btn-primary" id="new-game" type="button" aria-label="New game">
-          New Game
-        </button>
+        <div class="chip">
+          <span class="chip-label">Best</span>
+          <span class="chip-value" id="best">0</span>
+        </div>
       </div>
     </header>
 
@@ -64,6 +53,20 @@
     </main>
 
     <p class="hint"><span class="if-touch">Swipe to move.</span><span class="if-key">Arrow keys / WASD to move.</span> Merge tiles to reach 2048.</p>
+
+    <button class="install-btn" id="install" type="button" hidden>
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Add to Home Screen</span>
+    </button>
+
+    <div class="install-tip" id="install-tip" hidden>
+      <div class="install-tip-card">
+        <p>Install this app: tap the <strong>Share</strong> button
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        in your browser, then <strong>Add to Home Screen</strong>.</p>
+        <button class="btn" id="install-tip-close" type="button">Got it</button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="./game.js"></script>
