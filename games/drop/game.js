@@ -167,8 +167,7 @@ function makeSlots(index) {
 
   // guarantee the very first ring is a safe, obvious landing
   if (index === 0) {
-    const under = Math.floor((((BALL_ANGLE) % TAU) + TAU) % TAU / SLOT_ANGLE) % SLOTS;
-    slots[under] = 1;
+    slots[slotIndexAtBall()] = 1;
   }
   return slots;
 }
@@ -203,11 +202,18 @@ function ensureRings() {
   }
 }
 
-function slotTypeAtBall(ring) {
-  let local = BALL_ANGLE - tower.rotation.y;
+function slotIndexAtBall() {
+  // A positive rotation.y moves geometry toward negative atan2(z,x), so slot i
+  // (mesh.rotation.y = (i + 0.03) * SLOT_ANGLE, arc span 0.94 * SLOT_ANGLE)
+  // covers world angle -(i + 0.03)…-(i - 0.91) slots; invert the ball angle to
+  // match, and nudge by 0.94 so the 6% margin between segments splits evenly.
+  let local = -(BALL_ANGLE + tower.rotation.y);
   local = ((local % TAU) + TAU) % TAU;
-  const idx = Math.floor(local / SLOT_ANGLE) % SLOTS;
-  return ring.slots[idx];
+  return Math.floor(local / SLOT_ANGLE + 0.94) % SLOTS;
+}
+
+function slotTypeAtBall(ring) {
+  return ring.slots[slotIndexAtBall()];
 }
 
 // ---------------------------------------------------------------------------
