@@ -1,4 +1,4 @@
-const CACHE = 'am-snake-v1';
+const CACHE = 'am-snake-v2';
 
 const ASSETS = [
   './',

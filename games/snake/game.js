@@ -5,6 +5,9 @@
 const GRID = 17;
 const BEST_KEY = 'am.snake.best';
 
+// Same media condition as the .if-touch/.if-key CSS hint rules.
+const TOUCH = matchMedia('(hover: none), (pointer: coarse)').matches;
+
 // Speed ramp (cells per second) — gentle acceleration as the snake grows.
 const SPEED_MIN = 7.5;
 const SPEED_MAX = 13;
@@ -389,11 +392,14 @@ function hideOverlay() {
 }
 
 function showStart() {
-  showOverlay('Snake', 'swipe to steer', 'tap to start');
+  showOverlay('Snake',
+    TOUCH ? 'swipe to steer' : 'arrow keys to steer',
+    TOUCH ? 'tap to start' : 'press Space to start');
 }
 
 function showGameOver() {
-  showOverlay('Game over', `Score ${score}  ·  Best ${best}`, 'tap to play again');
+  showOverlay('Game over', `Score ${score}  ·  Best ${best}`,
+    TOUCH ? 'tap to play again' : 'press Space to play again');
 }
 
 // ---- Lifecycle ------------------------------------------------------------

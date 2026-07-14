@@ -33,9 +33,8 @@
     <div class="overlay" id="start-overlay">
       <div class="overlay-card">
         <h1 class="title">Glide</h1>
-        <p class="tagline">tap to stay aloft</p>
-        <div class="hint-row">
-          <span class="key">Tap</span>
+        <p class="tagline"><span class="if-touch">tap to stay aloft</span><span class="if-key">click to stay aloft</span></p>
+        <div class="hint-row if-key">
           <span class="key">Click</span>
           <span class="key">Space</span>
         </div>
@@ -58,7 +57,7 @@
         </div>
         <p class="new-best" id="new-best" hidden>New best</p>
         <button class="btn btn-primary" id="restart" type="button">Fly again</button>
-        <p class="restart-hint">tap, Space or R to restart</p>
+        <p class="restart-hint"><span class="if-touch">or tap anywhere</span><span class="if-key">Space or R to restart</span></p>
       </div>
     </div>
   </div>

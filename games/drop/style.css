@@ -197,3 +197,11 @@ body {
 .over-best span {
   color: var(--text);
 }
+
+/* Control hints: show only the variant matching the input device */
+@media (hover: hover) and (pointer: fine) {
+  .if-touch { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .if-key { display: none; }
+}
