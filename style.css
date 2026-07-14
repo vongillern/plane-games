@@ -119,12 +119,18 @@ h1 {
   .card-drop:hover { box-shadow: 0 0 40px -10px rgba(34, 211, 238, .35); }
   .card-snake:hover { box-shadow: 0 0 40px -10px rgba(52, 211, 153, .35); }
   .card-glide:hover { box-shadow: 0 0 40px -10px rgba(251, 113, 133, .35); }
+  .card-span:hover { box-shadow: 0 0 40px -10px rgba(96, 165, 250, .35); }
+  .card-runway:hover { box-shadow: 0 0 40px -10px rgba(232, 121, 249, .35); }
+  .card-hop:hover { box-shadow: 0 0 40px -10px rgba(163, 230, 53, .35); }
   .card:hover .chevron { transform: translate(3px, -1px); color: var(--text); }
 }
 
 .card:active { transform: scale(.98); }
 
 footer { text-align: center; }
+
+footer .install-btn { display: flex; margin: 14px auto 0; }
+footer .install-btn[hidden] { display: none; }
 
 footer p {
   display: inline-flex;
@@ -141,3 +147,65 @@ footer p {
   background: #34d399;
   box-shadow: 0 0 10px rgba(52, 211, 153, .8);
 }
+
+/* ---- Install (Add to Home Screen) ---- */
+.install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color .2s var(--ease-out), border-color .2s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.install-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, .2); }
+.install-btn[hidden] { display: none; }
+
+.install-tip {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, .6);
+  animation: install-tip-in .25s var(--ease-out);
+}
+.install-tip[hidden] { display: none; }
+@keyframes install-tip-in { from { opacity: 0; } }
+
+.install-tip-card {
+  max-width: 320px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #16161f;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+}
+.install-tip-card svg { vertical-align: -2px; }
+.install-tip-card strong { color: var(--text); font-weight: 600; }
+.install-tip-card button {
+  margin-top: 16px;
+  padding: 10px 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.install-btn, .install-tip { pointer-events: auto; }

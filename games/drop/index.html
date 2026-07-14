@@ -26,6 +26,7 @@
       <h1 class="title">Drop</h1>
       <p class="hint"><span class="if-touch">drag to rotate the tower</span><span class="if-key">drag or press ← → to rotate</span></p>
       <div class="cta"><span class="if-touch">tap to start</span><span class="if-key">press Space to start</span></div>
+      <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>
     </div>
   </div>
 
@@ -38,6 +39,49 @@
     </div>
   </div>
 
+  <div class="install-tip" id="install-tip" hidden>
+    <div class="install-tip-card">
+      <p>Install this app: tap the <strong>Share</strong> button
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      in your browser, then <strong>Add to Home Screen</strong>.</p>
+      <button id="install-tip-close" type="button">Got it</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const btn = document.getElementById('install');
+    const tip = document.getElementById('install-tip');
+    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    let deferred = null;
+    addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferred = e;
+      btn.hidden = false;
+    });
+    if (isIOS) btn.hidden = false;
+    for (const el of [btn, tip]) {
+      for (const t of ['pointerdown', 'pointerup', 'click']) {
+        el.addEventListener(t, (e) => e.stopPropagation());
+      }
+    }
+    btn.addEventListener('click', async () => {
+      if (deferred) {
+        deferred.prompt();
+        const { outcome } = await deferred.userChoice;
+        if (outcome === 'accepted') btn.hidden = true;
+        deferred = null;
+      } else {
+        tip.hidden = false;
+      }
+    });
+    document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
+    tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
+    addEventListener('appinstalled', () => { btn.hidden = true; });
+  })();
+  </script>
   <script type="module" src="./game.js"></script>
 </body>
 </html>
