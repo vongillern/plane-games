@@ -583,6 +583,24 @@ button {
   .overlay, .overlay-card, .menu-card, .overlay-hint { animation-duration: 1ms; }
 }
 
+/* ---------- Forced landscape ----------
+   Span is a landscape game. When installed, the manifest requests landscape.
+   In a portrait browser on a touch device we rotate the whole app 90° so the
+   span always gets the long axis; pointer coords are un-rotated in game.js. */
+@media (orientation: portrait) and (pointer: coarse) {
+  .app {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vh;
+    height: 100vw;
+    width: 100dvh;
+    height: 100dvw;
+    transform-origin: top left;
+    transform: rotate(90deg) translateY(-100%);
+  }
+}
+
 /* Control hints: show only the variant matching the input device */
 @media (hover: hover) and (pointer: fine) {
   .if-touch { display: none; }

@@ -33,10 +33,10 @@ const MAGNET_CADENCE = 30;               // seconds between magnet spawns
 const MAGNET_DURATION = 6;
 const MAGNET_RADIUS = 4.5;
 
-const CAM_UP = 4.3;
-const CAM_BACK = 6.8;
-const BASE_FOV = 64;
-const FOV_BONUS = 9;
+const CAM_UP = 3.2;
+const CAM_BACK = 5.5;
+const BASE_FOV = 68;
+const FOV_BONUS = 8;
 const CAM_LAG_RATE = 4.5;
 
 const BEST_KEY = 'am.runway.best';
@@ -82,7 +82,7 @@ scene.add(rim);
 // Shared geometries / materials
 // ---------------------------------------------------------------------------
 const wheelGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.09, 10);
-const coinGeo = new THREE.OctahedronGeometry(0.26, 0);
+const coinGeo = new THREE.OctahedronGeometry(0.42, 0);
 const debrisGeo = new THREE.BoxGeometry(0.22, 0.16, 0.16);
 
 const matGround = new THREE.MeshStandardMaterial({ color: 0x171025, roughness: 0.95, metalness: 0.0 });
@@ -107,7 +107,7 @@ const matGateBar = new THREE.MeshStandardMaterial({ color: 0xffb454, emissive: 0
 const matGateBarDark = new THREE.MeshStandardMaterial({ color: 0x171018, roughness: 0.5 });
 const matTanker = new THREE.MeshStandardMaterial({ color: 0x8b93a0, roughness: 0.35, metalness: 0.5 });
 const matTankerStripe = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.6, roughness: 0.4 });
-const matMagnetBody = new THREE.MeshStandardMaterial({ color: 0xb0b4bd, roughness: 0.3, metalness: 0.7 });
+const matMagnetBody = new THREE.MeshStandardMaterial({ color: 0xb0b4bd, emissive: 0x9aa2b8, emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.7 });
 const matMagnetTip = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0xff4d6d, emissiveIntensity: 0.6, roughness: 0.4 });
 const debrisColors = [0xff6b81, 0x4fd1c5, 0xffe66d, 0xf5f5f7, 0x9d8cff];
 
@@ -303,6 +303,7 @@ for (const [wx, wz] of [[-0.4, 0.26], [0.4, 0.26], [-0.4, -0.26], [0.4, -0.26]])
   wheels.push(w);
 }
 player.add(wheelsGroup);
+player.scale.setScalar(1.08);
 
 const magnetRing = new THREE.Mesh(
   new THREE.RingGeometry(1.15, 1.32, 32),
@@ -425,11 +426,15 @@ function buildTanker() {
 
 const OBSTACLE_BUILDERS = { cart: buildCart, gate: buildGate, tanker: buildTanker };
 const OBSTACLE_POOL_SIZE = { cart: 6, gate: 6, tanker: 4 };
+// visual-only enlargement so obstacles read clearly on a phone; collision
+// stays lane-based (COLLIDE_X/Z) and action-based (jump/slide), so scale is safe
+const OBSTACLE_SCALE = { cart: 1.35, gate: 1.22, tanker: 1.25 };
 const obstaclePools = { cart: [], gate: [], tanker: [] };
 
 for (const type of Object.keys(OBSTACLE_BUILDERS)) {
   for (let i = 0; i < OBSTACLE_POOL_SIZE[type]; i++) {
     const mesh = OBSTACLE_BUILDERS[type]();
+    mesh.scale.setScalar(OBSTACLE_SCALE[type]);
     mesh.visible = false;
     scene.add(mesh);
     obstaclePools[type].push({ mesh, active: false, lane: 1, z: SPAWN_Z, passed: false, type });
@@ -493,6 +498,7 @@ function buildMagnet() {
     tip.position.set(Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0);
     g.add(tip);
   }
+  g.scale.setScalar(1.6);
   return g;
 }
 
@@ -557,12 +563,12 @@ function spawnWaveCoins(laneTypes, z) {
     if (type === 'tanker') continue;
     if (type === 'cart') {
       if (Math.random() < 0.7) {
-        const heights = [0.85, 1.35, 0.85];
+        const heights = [0.95, 1.6, 0.95];
         for (let k = 0; k < 3; k++) spawnCoinAt(x, heights[k], z + (k - 1) * 1.5);
       }
     } else if (type === 'gate') {
       if (Math.random() < 0.7) {
-        for (let k = 0; k < 3; k++) spawnCoinAt(x, 0.18, z + (k - 1) * 1.3 - 2.2);
+        for (let k = 0; k < 3; k++) spawnCoinAt(x, 0.42, z + (k - 1) * 1.3 - 2.2);
       }
     } else if (Math.random() < 0.45) {
       for (let k = 0; k < 5; k++) spawnCoinAt(x, 0.5, z - k * 1.3 + 2.5);
@@ -795,7 +801,7 @@ function updateCollisions(dt) {
     c.mesh.rotation.y += c.spin * dt;
     if (c.z > DESPAWN_Z) { c.active = false; c.mesh.visible = false; continue; }
     const dx = Math.abs(laneX - c.x);
-    if (Math.abs(c.z) < 0.6 && dx < 0.65) collectCoin(c);
+    if (Math.abs(c.z) < 0.75 && dx < 0.75) collectCoin(c);
   }
 
   for (const m of magnetPickups) {
@@ -985,7 +991,7 @@ function updateCamera(dt) {
   const shx = (Math.random() - 0.5) * camShakeAmt;
   const shy = (Math.random() - 0.5) * camShakeAmt;
   camera.position.set(camX + shx, CAM_UP + shy, CAM_BACK);
-  camera.lookAt(camX * 0.5, 2.0, -16);
+  camera.lookAt(camX * 0.5, 1.5, -13);
 }
 let camX = 0;
 

@@ -173,6 +173,20 @@ body {
   outline: none;
 }
 
+/* a blocked move nudges the whole board the way you pushed */
+.board.bump-left  { animation: bump-x 140ms var(--ease-out); --bump: -7px; }
+.board.bump-right { animation: bump-x 140ms var(--ease-out); --bump: 7px; }
+.board.bump-up    { animation: bump-y 140ms var(--ease-out); --bump: -7px; }
+.board.bump-down  { animation: bump-y 140ms var(--ease-out); --bump: 7px; }
+
+@keyframes bump-x {
+  35% { transform: translateX(var(--bump)); }
+}
+
+@keyframes bump-y {
+  35% { transform: translateY(var(--bump)); }
+}
+
 .grid {
   position: absolute;
   inset: var(--pad);

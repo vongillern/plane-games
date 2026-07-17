@@ -206,6 +206,14 @@ function findFarthest(x, y, v) {
   return { farthest: prev, next: withinBounds(p) ? p : null };
 }
 
+// A swipe that can't move anything still answers back: the board nudges the
+// way you pushed, so touch users know the input registered.
+function bumpBoard(dir) {
+  boardEl.classList.remove('bump-left', 'bump-right', 'bump-up', 'bump-down');
+  void boardEl.offsetWidth; // restart the animation on repeated bumps
+  boardEl.classList.add('bump-' + dir);
+}
+
 function move(dir) {
   if (animating) {
     // never drop input mid-animation: keep only the latest queued move
@@ -252,7 +260,7 @@ function move(dir) {
     });
   });
 
-  if (!moved) return;
+  if (!moved) { bumpBoard(dir); return; }
 
   animating = true;
 
@@ -359,9 +367,12 @@ function showGameOver() {
   overlayEl.hidden = false;
 }
 
-// tap anywhere on a game-over overlay restarts
+// tap anywhere on the overlay backdrop = the primary action
+// (game over: restart; win: keep going)
 overlayEl.addEventListener('pointerdown', (e) => {
-  if (overlayTitle.textContent === 'Game over' && e.target === overlayEl) reset();
+  if (e.target !== overlayEl) return;
+  if (overlayTitle.textContent === 'Game over') reset();
+  else hideOverlay();
 });
 
 // ---- Input: keyboard ------------------------------------------------------

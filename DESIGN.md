@@ -47,6 +47,28 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
 - Haptics where supported: `navigator.vibrate?.(10)` on meaningful events only.
 - Instant restart. Death/game-over screens appear in <300ms and one tap restarts.
 
+## Touch affordances (every app)
+
+1. **Clamp, don't reject.** If an action has a limit (max length, board edge,
+   budget), stop the gesture at the limit live — never let the user complete an
+   invalid gesture and then tell them no.
+2. **Every registered input answers back.** When a legal gesture can't act
+   (blocked 2048 move, reversal swipe in Snake), respond with motion or haptic —
+   silence reads as "broken" on touch.
+3. **Finger-sized targets.** Buttons ≥ 44px. Canvas hit-testing converts a
+   px radius (~26px) to world units — never a fixed world radius that shrinks
+   with zoom.
+4. **Primary verbs get the whole screen.** Tap-to-start/restart accepts a tap
+   anywhere, not just on the button. Overlay backdrop taps do the primary action.
+5. **Hints match the device.** `.if-touch` / `.if-key` spans, switched purely in
+   CSS via hover/pointer media queries.
+6. **Orientation serves the content.** Portrait by default; a wide game (Span)
+   declares landscape in its manifest AND CSS-rotates in portrait browsers with
+   pointer coords mapped back (see `games/span/`).
+7. **Every app documents its interaction model** in `INTERACTIONS.md` beside its
+   code: the player's mental model, each input, and how it's discovered. Read it
+   before touching input code; update it when interactions change.
+
 ## PWA checklist (every app: hub and each game)
 
 Each directory is a fully independent, installable PWA:

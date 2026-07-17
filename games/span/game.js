@@ -151,6 +151,18 @@ function sizeCanvas() {
 }
 window.addEventListener('resize', sizeCanvas);
 
+// Forced landscape: when a portrait touch device rotates the app via CSS
+// (see style.css), pointer coordinates arrive in physical-screen space and
+// must be mapped back into the rotated element's space.
+const rotQ = matchMedia('(orientation: portrait) and (pointer: coarse)');
+const isRotated = () => rotQ.matches;
+rotQ.addEventListener?.('change', () => requestAnimationFrame(sizeCanvas));
+
+// Best effort on platforms that allow it (installed / fullscreen).
+function tryLockLandscape() {
+  try { screen.orientation?.lock?.('landscape')?.catch?.(() => {}); } catch { /* unsupported */ }
+}
+
 function worldBounds() {
   let yMin = Math.min(level.leftTop, level.rightTop) - 2.4;
   for (const a of levelAnchors(level)) yMin = Math.min(yMin, a.y - 1.4);
@@ -207,14 +219,54 @@ function nearestNode(x, y, radius) {
   return bestI;
 }
 
+// Hit radii sized for fingers: a fixed on-screen size converted to world units.
+const snapRadius = () => Math.max(0.42, 26 / view.scale);
+const eraseRadius = () => Math.max(0.28, 20 / view.scale);
+
 // Snap a pointer position: an existing node, else a valid grid point, else null.
 function snapPoint(x, y) {
-  const ni = nearestNode(x, y, 0.42);
+  const ni = nearestNode(x, y, snapRadius());
   if (ni >= 0) return { node: ni, x: bridge.nodes[ni].x, y: bridge.nodes[ni].y };
   const gx = Math.round(x / GRID_STEP) * GRID_STEP;
   const gy = Math.round(y / GRID_STEP) * GRID_STEP;
   if (!validNodePos(gx, gy)) return null;
   return { node: -1, x: gx, y: gy };
+}
+
+// Snap the endpoint of an in-progress drag. The point is clamped to the
+// material's max length: the beam simply stops growing at its limit instead
+// of stretching on and being rejected as "too long" on release.
+function snapDragPoint(from, x, y, mat) {
+  const max = MATS[mat].maxLen;
+  const ni = nearestNode(x, y, snapRadius());
+  if (ni >= 0) {
+    const n = bridge.nodes[ni];
+    if (Math.hypot(n.x - from.x, n.y - from.y) <= max + 1e-6) {
+      return { node: ni, x: n.x, y: n.y };
+    }
+  }
+  let dx = x - from.x, dy = y - from.y;
+  const len = Math.hypot(dx, dy);
+  if (len > max) { dx *= max / len; dy *= max / len; }
+  const tx = from.x + dx, ty = from.y + dy;
+  // nearest valid grid point to the (clamped) tip that stays inside the limit
+  const gx0 = Math.floor(tx / GRID_STEP) * GRID_STEP;
+  const gy0 = Math.floor(ty / GRID_STEP) * GRID_STEP;
+  let bestPt = null, bestD = Infinity;
+  for (let i = -1; i <= 2; i++) {
+    for (let j = -1; j <= 2; j++) {
+      const gx = gx0 + i * GRID_STEP, gy = gy0 + j * GRID_STEP;
+      if (Math.hypot(gx - from.x, gy - from.y) > max + 1e-6) continue;
+      if (!validNodePos(gx, gy)) continue;
+      const d = Math.hypot(gx - tx, gy - ty);
+      if (d < bestD) { bestD = d; bestPt = { node: -1, x: gx, y: gy }; }
+    }
+  }
+  if (!bestPt) return null;
+  // the chosen grid point may already hold a node — connect, don't duplicate
+  const onNode = nearestNode(bestPt.x, bestPt.y, 1e-6);
+  if (onNode >= 0) return { node: onNode, x: bridge.nodes[onNode].x, y: bridge.nodes[onNode].y };
+  return bestPt;
 }
 
 function findMember(a, b) {
@@ -230,7 +282,7 @@ function segDist(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
 }
 
-function memberAt(x, y, radius = 0.28) {
+function memberAt(x, y, radius = eraseRadius()) {
   let bestI = -1, bestD = radius;
   for (let i = 0; i < bridge.members.length; i++) {
     const m = bridge.members[i];
@@ -354,6 +406,7 @@ function renderLevelChips() {
 
 // ---- Screen flow ------------------------------------------------------------
 function openLevel(i) {
+  tryLockLandscape();
   levelIndex = i;
   level = LEVELS[i];
   levelNumEl.textContent = `Level ${i + 1}`;
@@ -504,6 +557,11 @@ document.addEventListener('keydown', (e) => {
 // ---- Pointer input ----------------------------------------------------------
 function pointerWorld(e) {
   const r = canvas.getBoundingClientRect();
+  if (isRotated()) {
+    // canvas is rotated 90° cw: element-x runs down the screen,
+    // element-y runs right-to-left
+    return { x: sx2w(e.clientY - r.top), y: sy2w(r.right - e.clientX) };
+  }
   return { x: sx2w(e.clientX - r.left), y: sy2w(e.clientY - r.top) };
 }
 
@@ -545,7 +603,7 @@ canvas.addEventListener('pointerup', (e) => {
   const p = pointerWorld(e);
   if (!d.moved) {
     // tap: delete a beam if the tap wasn't on a node
-    const ni = nearestNode(p.x, p.y, 0.42);
+    const ni = nearestNode(p.x, p.y, snapRadius());
     if (ni < 0) {
       const mi = memberAt(p.x, p.y);
       if (mi >= 0) deleteMember(mi);
@@ -553,7 +611,7 @@ canvas.addEventListener('pointerup', (e) => {
     return;
   }
   if (!d.from) return;
-  const to = snapPoint(p.x, p.y);
+  const to = snapDragPoint(d.from, p.x, p.y, material);
   if (!to) return;
   placeMember(d.from, to, material);
 });
@@ -830,7 +888,7 @@ function drawNodes(now) {
 
 function drawPreview() {
   const from = drag.from;
-  const to = snapPoint(drag.x, drag.y);
+  const to = snapDragPoint(from, drag.x, drag.y, material);
   const u = view.scale;
   const end = to || { x: drag.x, y: drag.y };
   const c = to ? checkMember(from, end, material) : { ok: false, reason: '', cost: 0, len: 0 };
@@ -1065,6 +1123,7 @@ window.__test = {
   // world -> client coords (for driving pointer input in tests)
   screenPos(x, y) {
     const r = canvas.getBoundingClientRect();
+    if (isRotated()) return { x: r.right - wy(y), y: r.top + wx(x) };
     return { x: r.left + wx(x), y: r.top + wy(y) };
   },
 };
