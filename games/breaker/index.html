@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Breaker</title>
+  <meta name="theme-color" content="#57150d" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="A polished brick-breaker: drag the paddle, smash glowing bricks, catch power-ups. Fully offline." />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Breaker" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- avoid flash of unstyled background -->
+  <style>html{background:#0a0a0f}</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+
+    <!-- In-play HUD (clamped to the playfield via JS) -->
+    <div class="hud" id="hud">
+      <div class="score" id="score">0</div>
+      <div class="level-chip">LV <span id="level-value">1</span></div>
+      <div class="hearts" id="hearts" aria-label="lives"></div>
+    </div>
+
+    <div class="banner" id="banner"></div>
+    <div class="serve-hint" id="serve-hint"><span class="if-touch">drag to aim &middot; tap to launch</span><span class="if-key">space to launch</span></div>
+
+    <!-- Start overlay -->
+    <div class="overlay" id="start-overlay">
+      <div class="overlay-card">
+        <div class="brick-preview" aria-hidden="true">
+          <svg viewBox="0 0 100 86" width="84" height="72">
+            <g class="pv-bricks">
+              <rect x="2"  y="2"  width="22" height="9" rx="2.5" fill="#f43f5e"/>
+              <rect x="27" y="2"  width="22" height="9" rx="2.5" fill="#f97316"/>
+              <rect x="52" y="2"  width="22" height="9" rx="2.5" fill="#fbbf24"/>
+              <rect x="77" y="2"  width="21" height="9" rx="2.5" fill="#a3e635"/>
+              <rect x="2"  y="14" width="22" height="9" rx="2.5" fill="#34d399"/>
+              <rect x="27" y="14" width="22" height="9" rx="2.5" fill="#22d3ee"/>
+              <rect x="52" y="14" width="22" height="9" rx="2.5" fill="#818cf8"/>
+              <rect x="77" y="14" width="21" height="9" rx="2.5" fill="#c084fc"/>
+            </g>
+            <circle class="pv-ball" cx="50" cy="46" r="5" fill="#fff7ed"/>
+            <rect class="pv-paddle" x="31" y="74" width="38" height="7" rx="3.5" fill="#f97316"/>
+          </svg>
+        </div>
+        <h1 class="title">Breaker</h1>
+        <p class="tagline">smash every brick</p>
+        <p class="best-line">Best <span id="start-best">0</span></p>
+        <p class="hint"><span class="if-touch">drag anywhere to move the paddle</span><span class="if-key">← → or A / D to move &middot; space to launch</span></p>
+        <p class="cta"><span class="if-touch">tap to start</span><span class="if-key">space to start</span></p>
+
+        <button class="install-btn" id="install" type="button" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Add to Home Screen</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="over-overlay" hidden>
+      <div class="overlay-card">
+        <p class="over-label">Out of lives</p>
+        <div class="scoreboard">
+          <div class="stat">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="final-score">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value" id="best-score">0</span>
+          </div>
+        </div>
+        <p class="new-best" id="new-best" hidden>New best</p>
+        <button class="btn btn-primary" id="restart" type="button">Break again</button>
+        <p class="restart-hint"><span class="if-touch">or tap anywhere</span><span class="if-key">Space or R to restart</span></p>
+      </div>
+    </div>
+
+    <div class="install-tip" id="install-tip" hidden>
+      <div class="install-tip-card">
+        <p>Install this app: tap the <strong>Share</strong> button
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        in your browser, then <strong>Add to Home Screen</strong>.</p>
+        <button class="btn" id="install-tip-close" type="button">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

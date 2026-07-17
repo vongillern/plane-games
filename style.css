@@ -122,6 +122,8 @@ h1 {
   .card-span:hover { box-shadow: 0 0 40px -10px rgba(96, 165, 250, .35); }
   .card-runway:hover { box-shadow: 0 0 40px -10px rgba(232, 121, 249, .35); }
   .card-hop:hover { box-shadow: 0 0 40px -10px rgba(163, 230, 53, .35); }
+  .card-nova:hover { box-shadow: 0 0 40px -10px rgba(56, 189, 248, .35); }
+  .card-breaker:hover { box-shadow: 0 0 40px -10px rgba(249, 115, 22, .35); }
   .card:hover .chevron { transform: translate(3px, -1px); color: var(--text); }
 }
 

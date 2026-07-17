@@ -215,6 +215,30 @@ function hopLayers(t) {
   ];
 }
 
+function novaLayers(t) {
+  // sleek ship climbing through a starfield, twin laser trails below
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  const star = (x, y, r, a) => ({ sdf: sdCircle(t(x), t(y), t(r)), color: solid('#ffffff', a) });
+  return [
+    star(140, 128, 10, 150), star(392, 170, 7, 110), star(352, 96, 12, 200),
+    star(112, 300, 8, 90), star(404, 330, 9, 130),
+    { sdf: sdRoundRect(t(206), t(420), t(9), t(52), t(9)), color: solid('#ffffff', 120) },  // left laser trail
+    { sdf: sdRoundRect(t(306), t(420), t(9), t(52), t(9)), color: solid('#ffffff', 120) },  // right laser trail
+    { sdf: p([[256, 130], [332, 340], [256, 296], [180, 340]]), color: solid('#ffffff') },  // ship hull
+    { sdf: sdCircle(t(256), t(216), t(24)), color: gradient('#bae6fd', '#38bdf8', t(232), t(192), t(280), t(240)) }, // cockpit
+  ];
+}
+function breakerLayers(t) {
+  // brick rows above, ball mid-flight, paddle below
+  const brick = (cx, cy, a) => ({ sdf: sdRoundRect(t(cx), t(cy), t(52), t(21), t(12)), color: solid('#ffffff', a) });
+  return [
+    brick(140, 128, 235), brick(256, 128, 190), brick(372, 128, 235),
+    brick(198, 186, 150), brick(314, 186, 150),
+    { sdf: sdRoundRect(t(256), t(408), t(96), t(17), t(15)), color: solid('#ffffff', 235) }, // paddle
+    { sdf: sdCircle(t(300), t(302), t(34)), color: gradient('#ffffff', '#ffe3c4', t(272), t(274), t(328), t(330)) }, // ball
+  ];
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -239,6 +263,12 @@ const APPS = [
   },
   {
     dir: 'games/hop', bg0: '#1b3f22', bg1: '#84cc16', art: hopLayers,
+  },
+  {
+    dir: 'games/nova', bg0: '#101b3f', bg1: '#38bdf8', art: novaLayers,
+  },
+  {
+    dir: 'games/breaker', bg0: '#57150d', bg1: '#f97316', art: breakerLayers,
   },
 ];
 

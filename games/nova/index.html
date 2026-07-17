@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Nova</title>
+  <meta name="theme-color" content="#101b3f" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="A vertical galaxy shooter — waves of alien formations, glowing lasers, power-ups. Fully offline." />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Nova" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- avoid flash of unstyled background -->
+  <style>html{background:#0a0a0f}</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+
+    <!-- Frame aligned to the letterboxed world; HUD + controls live here -->
+    <div class="frame" id="frame">
+      <div class="hud" id="hud">
+        <div class="hud-score" id="score">0</div>
+        <div class="hud-level" id="level-ind">LV 1</div>
+        <div class="hud-lives" id="lives" aria-label="Lives">
+          <svg class="heart" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <svg class="heart" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+          <svg class="heart" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+        </div>
+      </div>
+
+      <div class="level-banner" id="level-banner"></div>
+
+      <div class="touch-controls if-touch" id="touch-controls">
+        <button class="ctl-btn" id="btn-left" type="button" aria-label="Move left">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="ctl-btn" id="btn-right" type="button" aria-label="Move right">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Start overlay -->
+    <div class="overlay" id="start-overlay">
+      <div class="overlay-card">
+        <div class="ship-preview" aria-hidden="true">
+          <svg viewBox="0 0 100 100" width="76" height="76">
+            <defs>
+              <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#e0f2fe"/>
+                <stop offset=".45" stop-color="#38bdf8"/>
+                <stop offset="1" stop-color="#0369a1"/>
+              </linearGradient>
+            </defs>
+            <path class="ship-flame" d="M43 80 Q50 98 57 80 L50 84 Z" fill="#7dd3fc"/>
+            <path d="M60 46 L88 70 L83 78 L58 66 Z" fill="#0369a1"/>
+            <path d="M40 46 L12 70 L17 78 L42 66 Z" fill="#0369a1"/>
+            <path d="M50 8 L63 52 L60 76 L50 82 L40 76 L37 52 Z" fill="url(#hull)"/>
+            <ellipse cx="50" cy="40" rx="4.6" ry="11" fill="#e0f2fe" opacity=".9"/>
+          </svg>
+        </div>
+        <h1 class="title">Nova</h1>
+        <p class="tagline">hold the line against the swarm</p>
+        <p class="best-line">Best <span id="start-best">0</span></p>
+        <p class="hint"><span class="if-touch">drag or use ◀ ▶ to fly &middot; lasers fire themselves</span><span class="if-key">← → or A / D to fly &middot; lasers fire themselves</span></p>
+        <p class="cta"><span class="if-touch">tap to start</span><span class="if-key">space to start</span></p>
+
+        <button class="install-btn" id="install" type="button" hidden>
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span>Add to Home Screen</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="over-overlay" hidden>
+      <div class="overlay-card">
+        <p class="over-label">Ship lost</p>
+        <div class="scoreboard">
+          <div class="stat">
+            <span class="stat-label">Score</span>
+            <span class="stat-value" id="final-score">0</span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value" id="best-score">0</span>
+          </div>
+        </div>
+        <p class="wave-line">Reached level <span id="final-level">1</span></p>
+        <p class="new-best" id="new-best" hidden>New best</p>
+        <button class="btn btn-primary" id="restart" type="button">Fly again</button>
+        <p class="restart-hint"><span class="if-touch">or tap anywhere</span><span class="if-key">Space or R to restart</span></p>
+      </div>
+    </div>
+
+    <div class="install-tip" id="install-tip" hidden>
+      <div class="install-tip-card">
+        <p>Install this app: tap the <strong>Share</strong> button
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        in your browser, then <strong>Add to Home Screen</strong>.</p>
+        <button class="btn" id="install-tip-close" type="button">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

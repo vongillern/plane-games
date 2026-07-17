@@ -1,0 +1,453 @@
+:root {
+  --bg: #0a0a0f;
+  --surface: #16161f;
+  --surface-2: #1e1e2a;
+  --text: #f5f5f7;
+  --text-dim: rgba(245, 245, 247, .55);
+  --border: rgba(255, 255, 255, .08);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --ease-spring: cubic-bezier(.22, 1.2, .36, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+
+  --accent: #f97316;
+  --accent-soft: #fdba74;
+  --accent-deep: #c2410c;
+  --accent-dim: rgba(249, 115, 22, .35);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---------- In-play HUD ---------- */
+.hud {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0 16px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.score {
+  font-size: clamp(24px, 7vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--text);
+  text-shadow: 0 2px 20px rgba(0, 0, 0, .55), 0 0 22px var(--accent-dim);
+  min-width: 64px;
+}
+
+.level-chip {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: var(--text-dim);
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(10, 10, 15, .45);
+}
+
+.hearts {
+  display: flex;
+  gap: 4px;
+  min-width: 64px;
+  justify-content: flex-end;
+  padding-top: 3px;
+}
+
+.hearts .heart {
+  display: inline-flex;
+  color: #f43f5e;
+  filter: drop-shadow(0 0 6px rgba(244, 63, 94, .45));
+  transition: opacity 260ms var(--ease-out), transform 260ms var(--ease-spring);
+}
+
+.hearts .heart.off {
+  color: rgba(245, 245, 247, .22);
+  filter: none;
+  opacity: .5;
+  transform: scale(.82);
+}
+
+.hearts .heart[hidden] {
+  display: none;
+}
+
+/* ---------- Level banner ---------- */
+.banner {
+  position: absolute;
+  top: 38%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+  font-size: clamp(34px, 11vw, 52px);
+  font-weight: 800;
+  letter-spacing: .12em;
+  background: linear-gradient(165deg, var(--accent-soft), var(--accent) 55%, var(--accent-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 30px var(--accent-dim));
+  opacity: 0;
+  transform: translateY(10px) scale(.92);
+  transition: opacity 380ms var(--ease-out), transform 380ms var(--ease-spring);
+}
+
+.banner.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ---------- Serve hint ---------- */
+.serve-hint {
+  position: absolute;
+  top: 76%;
+  left: 0;
+  right: 0;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  opacity: 0;
+  transition: opacity 300ms var(--ease-out);
+}
+
+.serve-hint.show {
+  opacity: 1;
+  animation: pulse-hint 1.8s ease-in-out infinite;
+}
+
+/* ---------- Overlays ---------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    calc(env(safe-area-inset-top) + 20px)
+    calc(env(safe-area-inset-right) + 20px)
+    calc(env(safe-area-inset-bottom) + 20px)
+    calc(env(safe-area-inset-left) + 20px);
+  background: radial-gradient(120% 90% at 50% 32%, rgba(20, 8, 4, .3), rgba(10, 5, 3, .8) 78%);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  z-index: 3;
+  animation: fade 300ms var(--ease-out) both;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overlay-card {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  animation: rise 360ms var(--ease-spring) both;
+}
+
+@keyframes rise {
+  from { transform: translateY(12px) scale(.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* ---------- Brick preview (start screen) ---------- */
+.brick-preview {
+  margin-bottom: 4px;
+  filter: drop-shadow(0 8px 20px var(--accent-dim));
+}
+
+.brick-preview .pv-ball {
+  animation: pv-bounce 1.5s cubic-bezier(.45, 0, .55, 1) infinite alternate;
+}
+
+@keyframes pv-bounce {
+  from { transform: translateY(0); }
+  to { transform: translateY(22px); }
+}
+
+.brick-preview .pv-paddle {
+  animation: pv-paddle 3s ease-in-out infinite;
+}
+
+@keyframes pv-paddle {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-9px); }
+  70% { transform: translateX(9px); }
+}
+
+.title {
+  font-size: clamp(52px, 18vw, 96px);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: .95;
+  background: linear-gradient(165deg, var(--accent-soft), var(--accent) 52%, var(--accent-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 34px var(--accent-dim));
+}
+
+.tagline {
+  font-size: clamp(15px, 4.6vw, 19px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.best-line {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--accent);
+  margin-top: 6px;
+}
+
+.hint {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  margin-top: 16px;
+}
+
+.cta {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: var(--accent);
+  margin-top: 4px;
+  animation: pulse-hint 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-hint {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* ---------- Game over ---------- */
+.over-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.scoreboard {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.stat {
+  min-width: 108px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 62%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.new-best {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--accent);
+  margin-top: -2px;
+}
+
+.new-best[hidden] {
+  display: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 30px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 130ms var(--ease-out), box-shadow 130ms var(--ease-out);
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: #2a0e02;
+  background: linear-gradient(165deg, var(--accent-soft), var(--accent) 58%, var(--accent-deep));
+  box-shadow: 0 0 40px -8px var(--accent-dim);
+}
+
+.restart-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .overlay-card,
+  .brick-preview .pv-ball,
+  .brick-preview .pv-paddle,
+  .cta,
+  .serve-hint,
+  .banner { animation-duration: 1ms; transition-duration: 1ms; }
+}
+
+/* Control hints: show only the variant matching the input device */
+@media (hover: hover) and (pointer: fine) {
+  .if-touch { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .if-key { display: none; }
+}
+
+/* ---- Install (Add to Home Screen) ---- */
+.install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color .2s var(--ease-out), border-color .2s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.install-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, .2); }
+.install-btn[hidden] { display: none; }
+
+.install-tip {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, .6);
+  animation: install-tip-in .25s var(--ease-out);
+}
+.install-tip[hidden] { display: none; }
+@keyframes install-tip-in { from { opacity: 0; } }
+
+.install-tip-card {
+  max-width: 320px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #16161f;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+}
+.install-tip-card svg { vertical-align: -2px; }
+.install-tip-card strong { color: var(--text); font-weight: 600; }
+.install-tip-card button {
+  margin-top: 16px;
+  padding: 10px 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.install-btn, .install-tip { pointer-events: auto; }
