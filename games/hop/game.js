@@ -14,6 +14,7 @@ const SPRING_MULT = 2.5;        // spring pad bounce multiplier
 const MAX_VX = 380;             // u/s
 const STEER_ACCEL = 1700;       // u/s^2 while holding a direction
 const AIR_FRICTION = 1100;      // u/s^2 deceleration with no input
+const FOLLOW_GAIN = 8;          // touch: desired vx per unit of finger offset
 const PLAYER_R = 16;             // virtual units
 const PLATFORM_H = 14;
 const CAM_ANCHOR = 0.55;        // player stays below this fraction of screen height
@@ -207,7 +208,7 @@ let maxAltitude, best, fired, particlesActiveCount;
 let state; // 'ready' | 'playing' | 'dying' | 'dead'
 let deadAt = 0;
 let t = 0; // running clock (s), used for idle animation phases
-let inputLeft = false, inputRight = false, touchDir = 0;
+let inputLeft = false, inputRight = false, touchDir = 0, touchTargetX = null;
 let satellite;
 
 function makeGenState() { return { highestY: 0, lastUnsafe: false }; }
@@ -343,7 +344,7 @@ function reset() {
   maxAltitude = 0;
   fired = new Set();
   t = 0;
-  inputLeft = inputRight = false; touchDir = 0;
+  inputLeft = inputRight = false; touchDir = 0; touchTargetX = null;
   satellite = { x: Math.random() * VW, y: -95000, speed: 12, active: false };
   altitudeValueEl.textContent = '0';
   hideMilestone(true);
@@ -438,25 +439,27 @@ window.addEventListener('keyup', (e) => {
 });
 
 let ptrId = null;
-function updateTouchDir(clientX) {
+// Touch is finger-follow: the jelly steers toward the finger's x, not toward
+// whichever half of the screen is held. Canvas width maps 1:1 onto world VW.
+function updateTouchTarget(clientX) {
   const rect = canvas.getBoundingClientRect();
-  const localX = clientX - rect.left;
-  touchDir = localX < rect.width / 2 ? -1 : 1;
+  touchTargetX = clamp((clientX - rect.left) / rect.width, 0, 1) * VW;
 }
 stage.addEventListener('pointerdown', (e) => {
   ptrId = e.pointerId;
-  if (state === 'ready') { startPlaying(); updateTouchDir(e.clientX); return; }
+  if (state === 'ready') { startPlaying(); updateTouchTarget(e.clientX); return; }
   if (state === 'dead') { restart(); return; }
-  if (state === 'playing') updateTouchDir(e.clientX);
+  if (state === 'playing') updateTouchTarget(e.clientX);
 });
 stage.addEventListener('pointermove', (e) => {
   if (ptrId !== e.pointerId) return;
-  if (state === 'playing') updateTouchDir(e.clientX);
+  if (state === 'playing') updateTouchTarget(e.clientX);
 });
 function endPointer(e) {
   if (ptrId !== e.pointerId) return;
   ptrId = null;
   touchDir = 0;
+  touchTargetX = null;
 }
 stage.addEventListener('pointerup', endPointer);
 stage.addEventListener('pointercancel', endPointer);
@@ -514,13 +517,24 @@ function update(dt) {
   if (state !== 'playing') { updateParticles(dt); return; }
 
   // ---- steering ----
-  const dir = currentDirection();
-  if (dir !== 0) {
-    player.vx += dir * STEER_ACCEL * dt;
-    player.facing = dir;
-  } else if (player.vx !== 0) {
-    const decel = AIR_FRICTION * dt;
-    player.vx = Math.abs(player.vx) <= decel ? 0 : player.vx - Math.sign(player.vx) * decel;
+  // Finger-follow: desired velocity proportional to the finger's offset
+  // (an arrival curve), so the jelly settles under the finger rather than
+  // overshooting. Keys / test-hook steer() use constant acceleration.
+  if (touchTargetX !== null && touchDir === 0) {
+    const delta = touchTargetX - player.x;
+    const desired = clamp(delta * FOLLOW_GAIN, -MAX_VX, MAX_VX);
+    const step = STEER_ACCEL * dt;
+    player.vx += clamp(desired - player.vx, -step, step);
+    if (Math.abs(delta) > PLAYER_R * 0.5) player.facing = Math.sign(delta);
+  } else {
+    const dir = currentDirection();
+    if (dir !== 0) {
+      player.vx += dir * STEER_ACCEL * dt;
+      player.facing = dir;
+    } else if (player.vx !== 0) {
+      const decel = AIR_FRICTION * dt;
+      player.vx = Math.abs(player.vx) <= decel ? 0 : player.vx - Math.sign(player.vx) * decel;
+    }
   }
   player.vx = clamp(player.vx, -MAX_VX, MAX_VX);
   player.x = wrap(player.x + player.vx * dt, VW);
@@ -1095,6 +1109,7 @@ window.__test = {
   restart: () => restart(),
   tick(dtMs, times = 1) { for (let i = 0; i < times; i++) update(dtMs / 1000); },
   steer(dir) { touchDir = dir; },
+  setTouchTarget(x) { touchTargetX = x; },
   checkGeneratorInvariant,
   // place a platform of a given type directly in front of the player, within
   // easy reach, for deterministic behavior testing (crumble/spring/cloud/etc).

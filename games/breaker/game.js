@@ -16,7 +16,9 @@ const BRICK_W = 44, BRICK_H = 20;
 const GRID_X = (VW - COLS * CELL_W) / 2 + (CELL_W - BRICK_W) / 2;
 const GRID_Y = 92;
 
-const PADDLE_Y = 652;            // paddle center y
+const PADDLE_Y = 600;            // paddle center y — 100u of finger room below,
+                                 // so a dragging thumb rests under the paddle,
+                                 // not on it; the loss line stays at the bottom
 const PADDLE_H = 13;
 const PADDLE_W = 68;
 const PADDLE_WIDE_W = 116;

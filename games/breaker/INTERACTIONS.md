@@ -43,4 +43,8 @@ itself. Everything else — ball, bricks, power-ups — plays out above it.
   Bounces are clamped so a perfectly horizontal rally can never happen.
 - Losing an extra (multi-ball) ball costs nothing; only the last ball costs
   a life — generosity where it doesn't matter, tension where it does.
+- The paddle band floats ~100 world units above the bottom edge: dedicated
+  dead space where the dragging thumb rests without covering the paddle.
+  The ball is only lost past the very bottom of the field, below that band —
+  the gap is finger room, not extra danger.
 - Portrait-only by intent (400×700 world, letterboxed elsewhere).

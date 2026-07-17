@@ -8,11 +8,13 @@
 // Constants (world units: fixed 400x700 internal world, letterboxed to fit)
 // ---------------------------------------------------------------------------
 const VW = 400, VH = 700;
-const PLAYER_Y = VH - 84;       // ship's fixed vertical station
+const PLAYER_MAX_Y = VH - 84;   // lowest the ship flies (bottom margin)
+const PLAYER_MIN_Y = Math.round(VH * 2 / 3); // never higher than the bottom third
 const PLAYER_R = 14;            // ship hit radius (forgiving on purpose)
 const PLAYER_HALF = 18;         // horizontal clamp margin
 const PLAYER_SPEED = 360;       // u/s with keys / buttons
 const DRAG_EASE = 14;           // exponential chase rate toward the finger
+const DRAG_LIFT = 90;           // ship rides this far above the finger (world u)
 const FIRE_INTERVAL = 0.21;     // s between autofire volleys
 const BULLET_SPEED = 640;       // u/s upward
 const ENEMY_R = 15;             // enemy hit radius
@@ -111,6 +113,10 @@ window.addEventListener('resize', resize);
 function toWorldX(clientX) {
   const rect = canvas.getBoundingClientRect();
   return clamp((clientX - rect.left - ox) / s, 0, VW);
+}
+function toWorldY(clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return clamp((clientY - rect.top - oy) / s, 0, VH);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +401,8 @@ let player;               // { x, tilt }
 let playerBullets, enemyBullets, enemies, powerups;
 let fireCd, enemyFireCd, invUntil, shake, deadAt;
 let waveMode, clearT, formT, wave;
-let keyLeft = false, keyRight = false, btnDir = 0, testDir = 0, dragX = null;
+let keyLeft = false, keyRight = false, keyUp = false, keyDown = false;
+let btnDir = 0, testDir = 0, testDirY = 0, dragX = null, dragY = null;
 
 const bulletPool = [];
 function spawnBullet(arr, x, y, vx, vy) {
@@ -513,7 +520,7 @@ function reset() {
   t = 0;
   fireCd = 0;
   enemyFireCd = 1.5;
-  player = { x: VW / 2, tilt: 0 };
+  player = { x: VW / 2, y: PLAYER_MAX_Y, tilt: 0 };
   playerBullets = [];
   enemyBullets = [];
   enemies = [];
@@ -523,8 +530,8 @@ function reset() {
   clearT = 0;
   wave = { kind: 'grid', swayAmp: 0, swayFreq: 1, weaveFreq: 1, descend: 0 };
   formT = 0;
-  keyLeft = keyRight = false;
-  btnDir = 0; testDir = 0; dragX = null;
+  keyLeft = keyRight = keyUp = keyDown = false;
+  btnDir = 0; testDir = 0; testDirY = 0; dragX = null; dragY = null;
   updateHud(true);
   state = 'ready';
   syncStageClass();
@@ -554,8 +561,8 @@ function restart() {
 function die() {
   state = 'dying';
   deadAt = t;
-  addBurst(player.x, PLAYER_Y, '#7dd3fc', 30, 280);
-  addBurst(player.x, PLAYER_Y, '#e0f2fe', 18, 170);
+  addBurst(player.x, player.y, '#7dd3fc', 30, 280);
+  addBurst(player.x, player.y, '#e0f2fe', 18, 170);
   shake = 1;
   syncStageClass();
   navigator.vibrate?.(30);
@@ -612,11 +619,19 @@ function currentDir() {
   if (keyRight && !keyLeft) return 1;
   return 0;
 }
+function currentDirY() {
+  if (testDirY !== 0) return testDirY;
+  if (keyUp && !keyDown) return -1;
+  if (keyDown && !keyUp) return 1;
+  return 0;
+}
 
 window.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (['ArrowLeft', 'a', 'A'].includes(e.key)) { keyLeft = true; e.preventDefault(); }
   else if (['ArrowRight', 'd', 'D'].includes(e.key)) { keyRight = true; e.preventDefault(); }
+  else if (['ArrowUp', 'w', 'W'].includes(e.key)) { keyUp = true; e.preventDefault(); }
+  else if (['ArrowDown', 's', 'S'].includes(e.key)) { keyDown = true; e.preventDefault(); }
   else if (e.key === ' ' || e.key === 'Enter') {
     e.preventDefault();
     if (state === 'ready') startPlaying();
@@ -630,27 +645,35 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   if (['ArrowLeft', 'a', 'A'].includes(e.key)) keyLeft = false;
   else if (['ArrowRight', 'd', 'D'].includes(e.key)) keyRight = false;
+  else if (['ArrowUp', 'w', 'W'].includes(e.key)) keyUp = false;
+  else if (['ArrowDown', 's', 'S'].includes(e.key)) keyDown = false;
 });
 
-// Direct drag on the canvas: the ship chases the finger's x.
+// Direct drag on the canvas: the ship rides DRAG_LIFT above the finger and
+// chases it on both axes (clamped live to the bottom-third flight band).
 let ptrId = null;
+function updateDragTarget(e) {
+  dragX = toWorldX(e.clientX);
+  dragY = clamp(toWorldY(e.clientY) - DRAG_LIFT, PLAYER_MIN_Y, PLAYER_MAX_Y);
+}
 stage.addEventListener('pointerdown', (e) => {
   if (e.target.closest('button')) return;
   if (state === 'ready') { startPlaying(); return; }
   if (state === 'over') { restart(); return; }
   if (state === 'playing') {
     ptrId = e.pointerId;
-    dragX = toWorldX(e.clientX);
+    updateDragTarget(e);
   }
 });
 stage.addEventListener('pointermove', (e) => {
   if (ptrId !== e.pointerId) return;
-  if (state === 'playing') dragX = toWorldX(e.clientX);
+  if (state === 'playing') updateDragTarget(e);
 });
 function endPointer(e) {
   if (ptrId !== e.pointerId) return;
   ptrId = null;
   dragX = null;
+  dragY = null;
 }
 stage.addEventListener('pointerup', endPointer);
 stage.addEventListener('pointercancel', endPointer);
@@ -679,7 +702,7 @@ restartBtn.addEventListener('click', restart);
 // Combat
 // ---------------------------------------------------------------------------
 function firePlayer() {
-  const y = PLAYER_Y - 24;
+  const y = player.y - 24;
   if (weapon === 1) {
     spawnBullet(playerBullets, player.x, y, 0, -BULLET_SPEED);
   } else if (weapon === 2) {
@@ -735,14 +758,14 @@ function damagePlayer() {
   if (shield) {
     shield = false;
     invUntil = t + 1.0;
-    addBurst(player.x, PLAYER_Y, '#34d399', 22, 240);
+    addBurst(player.x, player.y, '#34d399', 22, 240);
     shake = Math.max(shake, 0.5);
     navigator.vibrate?.(10);
     return;
   }
   lives--;
   updateHud(true);
-  addBurst(player.x, PLAYER_Y, '#7dd3fc', 22, 240);
+  addBurst(player.x, player.y, '#7dd3fc', 22, 240);
   shake = 1;
   invUntil = t + INVINCIBLE_S;
   navigator.vibrate?.(20);
@@ -757,7 +780,7 @@ function applyPowerup(type) {
     if (lives < MAX_LIVES) { lives++; updateHud(true); }
     else score += 50;
   }
-  addBurst(player.x, PLAYER_Y - 10, POWER_COLORS[type], 16, 190);
+  addBurst(player.x, player.y - 10, POWER_COLORS[type], 16, 190);
   navigator.vibrate?.(10);
 }
 
@@ -780,7 +803,7 @@ function update(dt) {
   }
   if (state !== 'playing') { updateParticles(dt); return; }
 
-  // ---- movement ----
+  // ---- movement (x and y, both clamped live) ----
   const prevX = player.x;
   const dir = currentDir();
   if (dir !== 0) {
@@ -788,6 +811,13 @@ function update(dt) {
   } else if (dragX != null) {
     const target = clamp(dragX, PLAYER_HALF, VW - PLAYER_HALF);
     player.x += (target - player.x) * Math.min(1, dt * DRAG_EASE);
+  }
+  const dirY = currentDirY();
+  if (dirY !== 0) {
+    player.y = clamp(player.y + dirY * PLAYER_SPEED * dt, PLAYER_MIN_Y, PLAYER_MAX_Y);
+  } else if (dragY != null) {
+    const targetY = clamp(dragY, PLAYER_MIN_Y, PLAYER_MAX_Y);
+    player.y += (targetY - player.y) * Math.min(1, dt * DRAG_EASE);
   }
   const vx = dt > 0 ? (player.x - prevX) / dt : 0;
   player.tilt = lerp(player.tilt, clamp(vx / PLAYER_SPEED, -1, 1), Math.min(1, dt * 10));
@@ -848,7 +878,7 @@ function update(dt) {
       continue;
     }
     // contact with the ship
-    const pdx = e.x - player.x, pdy = e.y - PLAYER_Y;
+    const pdx = e.x - player.x, pdy = e.y - player.y;
     const contactR = ENEMY_R + PLAYER_R - 4;
     if (pdx * pdx + pdy * pdy < contactR * contactR) {
       damagePlayer();
@@ -870,7 +900,7 @@ function update(dt) {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     if (b.y > VH + 20) { releaseBullet(enemyBullets, i); continue; }
-    const dx = b.x - player.x, dy = b.y - PLAYER_Y;
+    const dx = b.x - player.x, dy = b.y - player.y;
     const r = PLAYER_R + 5;
     if (dx * dx + dy * dy < r * r) {
       releaseBullet(enemyBullets, i);
@@ -901,7 +931,7 @@ function update(dt) {
     pu.y += POWERUP_FALL * dt;
     pu.x = pu.baseX + Math.sin(t * 2 + pu.phase) * 10;
     if (pu.y > VH + 26) { swapRemove(powerups, i); continue; }
-    const dx = pu.x - player.x, dy = pu.y - PLAYER_Y;
+    const dx = pu.x - player.x, dy = pu.y - player.y;
     const r = POWERUP_R + PLAYER_R;
     if (dx * dx + dy * dy < r * r) {
       applyPowerup(pu.type);
@@ -973,7 +1003,7 @@ function drawFlame(x, y) {
 function drawShip() {
   const blink = t < invUntil && Math.floor(t * 12) % 2 === 0 && state === 'playing';
   if (blink) return;
-  const y = state === 'ready' ? PLAYER_Y + Math.sin(t * 2) * 3 : PLAYER_Y;
+  const y = state === 'ready' ? player.y + Math.sin(t * 2) * 3 : player.y;
   drawFlame(player.x, y + 14);
   ctx.save();
   ctx.translate(player.x, y);
@@ -1110,7 +1140,7 @@ if ('serviceWorker' in navigator) {
 // Test hook — tiny surface for headless verification (no effect on play).
 // ---------------------------------------------------------------------------
 window.__test = {
-  VW, VH, TOUCH,
+  VW, VH, TOUCH, PLAYER_MIN_Y, PLAYER_MAX_Y, DRAG_LIFT,
   get state() { return state; },
   get player() { return player; },
   get enemies() { return enemies; },
@@ -1128,11 +1158,18 @@ window.__test = {
   restart: () => restart(),
   tick(dtMs, times = 1) { for (let i = 0; i < times; i++) update(dtMs / 1000); },
   setDir(d) { testDir = d; },
+  setDirY(d) { testDirY = d; },
   setDrag(x) { dragX = x; },
+  // raw finger position in world units (applies the DRAG_LIFT offset + clamp,
+  // exactly like a real pointer event)
+  setTarget(x, y) {
+    dragX = x;
+    dragY = y == null ? null : clamp(y - DRAG_LIFT, PLAYER_MIN_Y, PLAYER_MAX_Y);
+  },
   // force one full hit (bypasses shield + mercy invincibility) — for tests
   hurt() { shield = false; invUntil = 0; damagePlayer(); },
   killAll() { for (let i = enemies.length - 1; i >= 0; i--) killEnemy(i, true); },
   spawnPowerup(type) {
-    powerups.push({ type, x: player.x, baseX: player.x, y: PLAYER_Y - 60, phase: 0 });
+    powerups.push({ type, x: player.x, baseX: player.x, y: player.y - 60, phase: 0 });
   },
 };

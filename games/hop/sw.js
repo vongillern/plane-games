@@ -1,4 +1,4 @@
-const CACHE = 'am-hop-v1';
+const CACHE = 'am-hop-v2';
 
 const ASSETS = [
   './',

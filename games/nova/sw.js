@@ -1,4 +1,4 @@
-const CACHE = 'am-nova-v1';
+const CACHE = 'am-nova-v2';
 
 const ASSETS = [
   './',
