@@ -275,14 +275,18 @@ function updatePlane(dt) {
 // Player: four selectable runners with radically different silhouettes.
 // Each builder returns { root, update(dt, speed) }; the root gets the slide
 // squash + bank, so any character works with the same action state machine.
+// Width budget: no more than 2/3 of a lane (2.2 world units), i.e. keep the
+// raw model within ~1.35 units across (player group is scaled by 1.08).
 // ---------------------------------------------------------------------------
-const matSaucerHull = new THREE.MeshStandardMaterial({ color: 0x9aa7b8, roughness: 0.3, metalness: 0.7, flatShading: true });
-const matSaucerDome = new THREE.MeshStandardMaterial({ color: 0x67e8f9, emissive: 0x22d3ee, emissiveIntensity: 0.8, transparent: true, opacity: 0.85, roughness: 0.2 });
-const matSaucerRing = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x22d3ee, emissiveIntensity: 1.4, roughness: 0.4 });
-const matBeam = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
-const matPlaneBody = new THREE.MeshStandardMaterial({ color: 0xf5f5f7, roughness: 0.35, metalness: 0.1, flatShading: true });
-const matPlaneTrim = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0xff4d6d, emissiveIntensity: 0.3, roughness: 0.45, flatShading: true });
-const matFlame = new THREE.MeshBasicMaterial({ color: 0xffb454, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+const matCrab = new THREE.MeshStandardMaterial({ color: 0xda7756, emissive: 0xda7756, emissiveIntensity: 0.22, roughness: 0.55, metalness: 0.05 });
+const matCrabDark = new THREE.MeshStandardMaterial({ color: 0xb85c3d, emissive: 0xb85c3d, emissiveIntensity: 0.18, roughness: 0.5, metalness: 0.05 });
+const matEyeWhite = new THREE.MeshStandardMaterial({ color: 0xf7f4ef, roughness: 0.35 });
+const matEyeDark = new THREE.MeshStandardMaterial({ color: 0x1b1b1f, roughness: 0.3 });
+const matBotWhite = new THREE.MeshStandardMaterial({ color: 0xe8e8ec, roughness: 0.35, metalness: 0.15 });
+const matBotDark = new THREE.MeshStandardMaterial({ color: 0x23252c, roughness: 0.5, metalness: 0.3 });
+const matVisor = new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.15, metalness: 0.6 });
+const matTronBody = new THREE.MeshStandardMaterial({ color: 0x0b0e14, roughness: 0.25, metalness: 0.7 });
+const matTronGlow = new THREE.MeshStandardMaterial({ color: 0x67e8f9, emissive: 0x22d3ee, emissiveIntensity: 2.2, roughness: 0.3 });
 
 function buildSuitcaseChar() {
   const root = new THREE.Group();
@@ -318,126 +322,256 @@ function buildSuitcaseChar() {
   };
 }
 
-function buildUfoChar() {
+// Clawd the crab — crabs run sideways, so this one faces the camera while
+// scuttling down the track: eye stalks up top, claws held out front.
+function buildCrabChar() {
   const root = new THREE.Group();
   let t = rand(0, Math.PI * 2);
-  const hull = new THREE.Mesh(new THREE.SphereGeometry(0.66, 20, 12), matSaucerHull);
-  hull.scale.y = 0.38;
-  hull.position.y = 0.6;
-  root.add(hull);
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), matSaucerDome);
-  dome.position.y = 0.72;
-  root.add(dome);
-  const spinner = new THREE.Group();
-  spinner.position.y = 0.6;
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.045, 8, 28), matSaucerRing);
-  ring.rotation.x = Math.PI / 2;
-  spinner.add(ring);
-  const podGeo = new THREE.SphereGeometry(0.07, 8, 6);
-  for (let i = 0; i < 4; i++) {
-    const pod = new THREE.Mesh(podGeo, matSaucerRing);
-    const a = (i / 4) * Math.PI * 2;
-    pod.position.set(Math.cos(a) * 0.72, 0, Math.sin(a) * 0.72);
-    spinner.add(pod);
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.46, 28, 20), matCrab);
+  body.scale.set(1.15, 0.72, 0.95);
+  body.position.y = 0.52;
+  root.add(body);
+  for (const sx of [-0.17, 0.17]) {
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.038, 0.26, 10), matCrab);
+    stalk.position.set(sx, 0.9, 0.1);
+    stalk.rotation.x = 0.12;
+    root.add(stalk);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.085, 16, 12), matEyeWhite);
+    eye.position.set(sx, 1.04, 0.13);
+    root.add(eye);
+    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 10), matEyeDark);
+    pupil.position.set(sx, 1.05, 0.2);
+    root.add(pupil);
   }
-  root.add(spinner);
-  const beam = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.5, 12, 1, true), matBeam);
-  beam.position.y = 0.26;
-  root.add(beam);
-  return {
-    root,
-    update(dt) {
-      t += dt;
-      spinner.rotation.y += dt * 5;
-      root.position.y = 0.14 + Math.sin(t * 3) * 0.05;
-    },
-  };
-}
-
-function buildPlaneChar() {
-  const root = new THREE.Group();
-  const fus = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 1.15, 10), matPlaneBody);
-  fus.rotation.x = Math.PI / 2;
-  fus.position.y = 0.62;
-  root.add(fus);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.35, 10), matPlaneTrim);
-  nose.rotation.x = -Math.PI / 2;
-  nose.position.set(0, 0.62, -0.75);
-  root.add(nose);
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.44), matPlaneBody);
-  wing.position.set(0, 0.56, -0.05);
-  root.add(wing);
-  for (const sx of [-0.94, 0.94]) {
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.46), matPlaneTrim);
-    tip.position.set(sx, 0.56, -0.05);
-    root.add(tip);
+  const claws = [];
+  for (const side of [-1, 1]) {
+    const claw = new THREE.Group();
+    claw.position.set(side * 0.32, 0.46, 0.34);
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.2, 10), matCrab);
+    arm.rotation.x = Math.PI / 2 - 0.3;
+    arm.position.set(0, 0.02, 0.05);
+    claw.add(arm);
+    const pincer = new THREE.Mesh(new THREE.SphereGeometry(0.14, 20, 14), matCrabDark);
+    pincer.scale.set(1.05, 0.9, 1.25);
+    pincer.position.set(side * 0.02, 0.02, 0.2);
+    claw.add(pincer);
+    const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), matCrabDark);
+    thumb.scale.set(0.9, 0.8, 1.4);
+    thumb.position.set(side * 0.02, 0.14, 0.24);
+    claw.add(thumb);
+    root.add(claw);
+    claws.push(claw);
   }
-  const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 0.3), matPlaneTrim);
-  tailFin.position.set(0, 0.92, 0.5);
-  root.add(tailFin);
-  const stab = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.26), matPlaneTrim);
-  stab.position.set(0, 0.76, 0.52);
-  root.add(stab);
-  const prop = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.95, 0.05), matHandle);
-  prop.position.set(0, 0.62, -0.96);
-  root.add(prop);
-  const wheels = [];
-  for (const [wx, wz] of [[-0.34, 0.1], [0.34, 0.1], [0, -0.6]]) {
-    const w = new THREE.Mesh(wheelGeo, matWheel);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(wx, 0.12, wz);
-    root.add(w);
-    wheels.push(w);
+  const legs = [];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const leg = new THREE.Group();
+      leg.position.set(side * 0.42, 0.42, (i - 1) * 0.24);
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.034, 0.34, 8), matCrabDark);
+      seg.position.y = -0.15;
+      seg.rotation.z = side * 0.55;
+      leg.add(seg);
+      root.add(leg);
+      legs.push({ leg, phase: i * 2.1 + (side > 0 ? 1.05 : 0), side });
+    }
   }
   return {
     root,
     update(dt, spd) {
-      prop.rotation.z += (18 + spd) * dt;
-      const spin = spd * dt * 4.2;
-      for (const w of wheels) w.rotation.x += spin;
+      t += dt * (5 + spd * 0.45);
+      for (const { leg, phase, side } of legs) {
+        leg.rotation.x = Math.sin(t + phase) * 0.4;
+        leg.rotation.z = side * Math.max(0, Math.sin(t + phase + 1.2)) * 0.18;
+      }
+      for (let i = 0; i < claws.length; i++) {
+        claws[i].rotation.x = Math.sin(t * 0.5 + i * Math.PI) * 0.12 - 0.08;
+      }
+      root.position.y = Math.abs(Math.sin(t * 0.5)) * 0.035;
     },
   };
 }
 
-function buildRocketChar() {
+// Optimus-style humanoid — white panels over a dark under-suit, black visor,
+// pendulum run cycle on arm/leg pivots.
+function buildOptimusChar() {
   const root = new THREE.Group();
   let t = rand(0, Math.PI * 2);
-  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 1.05, 12), matPlaneBody);
-  body.position.y = 0.95;
-  root.add(body);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.55, 12), matPlaneTrim);
-  nose.position.y = 1.72;
-  root.add(nose);
-  const port = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 12), matSaucerDome);
-  port.rotation.x = Math.PI / 2;
-  port.position.set(0, 1.1, 0.31);
-  root.add(port);
-  const finGeo = new THREE.BoxGeometry(0.07, 0.55, 0.34);
-  for (let i = 0; i < 3; i++) {
-    const holder = new THREE.Group();
-    holder.rotation.y = (i / 3) * Math.PI * 2;
-    const fin = new THREE.Mesh(finGeo, matPlaneTrim);
-    fin.position.set(0, 0.52, 0.42);
-    holder.add(fin);
-    root.add(holder);
+  const skull = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14), matBotWhite);
+  skull.scale.set(1, 1.12, 1.05);
+  skull.position.y = 1.52;
+  root.add(skull);
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(0.115, 18, 12), matVisor);
+  visor.scale.set(0.92, 0.88, 0.62);
+  visor.position.set(0, 1.51, -0.075);
+  root.add(visor);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.1, 12), matBotDark);
+  neck.position.y = 1.4;
+  root.add(neck);
+  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.34, 0.24), matBotWhite);
+  chest.position.y = 1.2;
+  root.add(chest);
+  const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.03), matBotDark);
+  chestPlate.position.set(0, 1.14, -0.13);
+  root.add(chestPlate);
+  const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.2), matBotDark);
+  abdomen.position.y = 0.95;
+  root.add(abdomen);
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.22), matBotWhite);
+  pelvis.position.y = 0.8;
+  root.add(pelvis);
+  const arms = [];
+  for (const side of [-1, 1]) {
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), matBotWhite);
+    shoulder.position.set(side * 0.29, 1.33, 0);
+    root.add(shoulder);
+    const arm = new THREE.Group();
+    arm.position.set(side * 0.31, 1.31, 0);
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.3, 12), matBotDark);
+    upper.position.y = -0.17;
+    arm.add(upper);
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 10), matBotWhite);
+    elbow.position.y = -0.34;
+    arm.add(elbow);
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.26, 12), matBotWhite);
+    fore.position.y = -0.49;
+    arm.add(fore);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), matBotDark);
+    hand.position.y = -0.64;
+    arm.add(hand);
+    root.add(arm);
+    arms.push(arm);
   }
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.55, 10), matFlame);
-  flame.rotation.x = Math.PI;
-  flame.position.y = 0.3;
-  root.add(flame);
+  const legs = [];
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Group();
+    leg.position.set(side * 0.12, 0.82, 0);
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.34, 12), matBotWhite);
+    thigh.position.y = -0.19;
+    leg.add(thigh);
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), matBotDark);
+    knee.position.y = -0.38;
+    leg.add(knee);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 12), matBotDark);
+    shin.position.y = -0.54;
+    leg.add(shin);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.06, 0.24), matBotWhite);
+    foot.position.set(0, -0.72, -0.05);
+    leg.add(foot);
+    root.add(leg);
+    legs.push(leg);
+  }
   return {
     root,
-    update(dt) {
-      t += dt;
-      const f = 0.75 + 0.3 * Math.sin(t * 26) + 0.12 * Math.sin(t * 13.7);
-      flame.scale.set(1, Math.max(0.4, f), 1);
-      root.position.y = 0.14 + Math.sin(t * 2.6) * 0.05;
+    update(dt, spd) {
+      t += dt * (4 + spd * 0.55);
+      const swing = Math.sin(t);
+      arms[0].rotation.x = swing * 0.6;
+      arms[1].rotation.x = -swing * 0.6;
+      legs[0].rotation.x = -swing * 0.55;
+      legs[1].rotation.x = swing * 0.55;
+      root.position.y = Math.abs(Math.cos(t)) * 0.05;
+    },
+  };
+}
+
+// Tron-style program — sleek black figure covered in pulsing cyan light
+// lines, identity disc on its back (the side the camera sees).
+function buildTronChar() {
+  const root = new THREE.Group();
+  let t = rand(0, Math.PI * 2);
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.12, 20, 14), matTronBody);
+  helmet.scale.set(1, 1.1, 1.05);
+  helmet.position.y = 1.58;
+  root.add(helmet);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.016, 8, 26), matTronGlow);
+  halo.rotation.x = Math.PI / 2;
+  halo.position.y = 1.58;
+  root.add(halo);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.115, 0.44, 16), matTronBody);
+  torso.position.y = 1.22;
+  root.add(torso);
+  const spine = new THREE.Mesh(new THREE.BoxGeometry(0.024, 0.36, 0.02), matTronGlow);
+  spine.position.set(0, 1.2, 0.145);
+  root.add(spine);
+  const discRing = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.02, 10, 28), matTronGlow);
+  discRing.position.set(0, 1.28, 0.19);
+  root.add(discRing);
+  const discCore = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.025, 22), matTronBody);
+  discCore.rotation.x = Math.PI / 2;
+  discCore.position.set(0, 1.28, 0.19);
+  root.add(discCore);
+  const belt = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.014, 8, 24), matTronGlow);
+  belt.rotation.x = Math.PI / 2;
+  belt.position.y = 0.98;
+  root.add(belt);
+  const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.09, 0.14, 14), matTronBody);
+  hips.position.y = 0.9;
+  root.add(hips);
+  const arms = [];
+  for (const side of [-1, 1]) {
+    const pad = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), matTronBody);
+    pad.position.set(side * 0.22, 1.4, 0);
+    root.add(pad);
+    const padGlow = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.012, 8, 20), matTronGlow);
+    padGlow.rotation.y = Math.PI / 2;
+    padGlow.position.set(side * 0.235, 1.4, 0);
+    root.add(padGlow);
+    const arm = new THREE.Group();
+    arm.position.set(side * 0.24, 1.38, 0);
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.3, 12), matTronBody);
+    upper.position.y = -0.17;
+    arm.add(upper);
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.04, 0.26, 12), matTronBody);
+    fore.position.y = -0.45;
+    arm.add(fore);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.2, 0.014), matTronGlow);
+    strip.position.set(side * 0.042, -0.45, 0);
+    arm.add(strip);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), matTronGlow);
+    hand.position.y = -0.61;
+    arm.add(hand);
+    root.add(arm);
+    arms.push(arm);
+  }
+  const legs = [];
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Group();
+    leg.position.set(side * 0.1, 0.86, 0);
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.048, 0.36, 12), matTronBody);
+    thigh.position.y = -0.2;
+    leg.add(thigh);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.34, 12), matTronBody);
+    shin.position.y = -0.56;
+    leg.add(shin);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.5, 0.012), matTronGlow);
+    strip.position.set(side * 0.055, -0.38, 0);
+    leg.add(strip);
+    const foot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.22), matTronBody);
+    foot.position.set(0, -0.76, -0.04);
+    leg.add(foot);
+    const heel = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.016, 0.02), matTronGlow);
+    heel.position.set(0, -0.76, 0.07);
+    leg.add(heel);
+    root.add(leg);
+    legs.push(leg);
+  }
+  return {
+    root,
+    update(dt, spd) {
+      t += dt * (4 + spd * 0.55);
+      const swing = Math.sin(t);
+      arms[0].rotation.x = swing * 0.6;
+      arms[1].rotation.x = -swing * 0.6;
+      legs[0].rotation.x = -swing * 0.55;
+      legs[1].rotation.x = swing * 0.55;
+      root.position.y = Math.abs(Math.cos(t)) * 0.05;
+      matTronGlow.emissiveIntensity = 1.8 + Math.sin(t * 1.7) * 0.6;
     },
   };
 }
 
 const RUNNER_KEY = 'am.runway.runner';
-const CHARACTER_BUILDERS = { case: buildSuitcaseChar, ufo: buildUfoChar, plane: buildPlaneChar, rocket: buildRocketChar };
+const CHARACTER_BUILDERS = { case: buildSuitcaseChar, crab: buildCrabChar, optimus: buildOptimusChar, tron: buildTronChar };
 
 const player = new THREE.Group();
 const characters = {};
@@ -1334,6 +1468,10 @@ window.__test = {
   },
   setRunner(id) { selectRunner(id); syncPicker(); },
   listRunners() { return Object.keys(characters); },
+  measureRunner() {
+    const box = new THREE.Box3().setFromObject(activeChar.root);
+    return { width: +(box.max.x - box.min.x).toFixed(3), height: +(box.max.y - box.min.y).toFixed(3) };
+  },
   start() { startGame(); },
   restart() { startGame(); },
   moveLeft() { changeLane(-1); },

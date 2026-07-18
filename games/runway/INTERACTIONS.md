@@ -2,8 +2,9 @@
 
 ## Mental model
 "I'm the runner." The player identifies with their chosen runner (rolling
-suitcase, UFO, prop plane, or rocket — picked on the start screen, remembered
-across visits) and thinks in lanes: *left / middle / right*, plus two evasive
+suitcase, Clawd the crab, an Optimus-style robot, or a Tron-style program —
+picked on the start screen, remembered across visits; every runner fits within
+2/3 of a lane) and thinks in lanes: *left / middle / right*, plus two evasive
 verbs, *jump* and *slide*. They never think about the camera or speed — those
 are the game's job. Obstacles are read two ways at a distance: by silhouette
 (low box = jump it, barrier with a gap under the bar = slide it, huge tanker =
