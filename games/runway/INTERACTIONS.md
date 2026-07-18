@@ -7,9 +7,13 @@ picked on the start screen, remembered across visits; every runner fits within
 2/3 of a lane) and thinks in lanes: *left / middle / right*, plus two evasive
 verbs, *jump* and *slide*. They never think about the camera or speed — those
 are the game's job. Obstacles are read two ways at a distance: by silhouette
-(low box = jump it, barrier with a gap under the bar = slide it, huge tanker =
-change lanes) and by a fog-proof glow on the ground under each one, color-coded
-by the verb that beats it: gold = jump, magenta = slide, red = change lanes.
+(low box = jump it, glowing bar = slide it, tanker = change lanes, long tram =
+dodge or ride it) and by a fog-proof glow on the ground under each one,
+color-coded by the verb that beats it: gold = jump, magenta = slide, red =
+change lanes / oncoming, cyan = ride the ramp up. Trams add a second story:
+run up a ramp tram and you're on the roofs — jump between them, collect the
+coin trail, and drop back down when they run out. See MECHANICS.md for the
+full Subway-Surfers mechanics map.
 
 ## Inputs (touch first)
 - **Swipe left / right** → change lane (one lane per swipe, clamped at edges).

@@ -33,6 +33,14 @@ const MAGNET_CADENCE = 30;               // seconds between magnet spawns
 const MAGNET_DURATION = 6;
 const MAGNET_RADIUS = 4.5;
 
+// trains (Subway-Surfers style trams)
+const TRAIN_TOP = 1.5;                   // roof height you run on
+const RAMP_LEN = 3.0;                    // z-length of the ramp slope
+const CAR_LEN = 3.6;
+const WALL_STEP = 0.6;                   // max support rise per frame before it counts as hitting a wall
+const GRAVITY = 26;                      // fall accel when running off a train roof
+const MOVING_TRAIN_VREL = 10;            // extra approach speed of oncoming trams
+
 const CAM_UP = 3.2;
 const CAM_BACK = 5.5;
 const BASE_FOV = 68;
@@ -86,10 +94,8 @@ const coinGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.07, 24);
 const debrisGeo = new THREE.BoxGeometry(0.22, 0.16, 0.16);
 
 const matGround = new THREE.MeshStandardMaterial({ color: 0x171025, roughness: 0.95, metalness: 0.0 });
-const matStripe = new THREE.MeshStandardMaterial({ color: 0x241535, roughness: 0.9 });
-const matDash = new THREE.MeshStandardMaterial({ color: 0xffe9c7, emissive: 0xffb85e, emissiveIntensity: 0.8, roughness: 0.6 });
-const matEdgeA = new THREE.MeshStandardMaterial({ color: 0x1a0a1a, emissive: ACCENT, emissiveIntensity: 1.4, roughness: 0.6 });
-const matEdgeB = new THREE.MeshStandardMaterial({ color: 0x1a1408, emissive: GOLD, emissiveIntensity: 1.1, roughness: 0.6 });
+const matLaneLine = new THREE.MeshBasicMaterial({ color: 0x9b79c0 });
+const matEdgeLine = new THREE.MeshBasicMaterial({ color: 0xc45fd8 });
 const matTower = new THREE.MeshStandardMaterial({ color: 0x140a22, roughness: 1, emissive: 0x1a0e2c, emissiveIntensity: 0.3 });
 const matCoin = new THREE.MeshStandardMaterial({ color: GOLD, emissive: GOLD, emissiveIntensity: 0.7, roughness: 0.3, metalness: 0.4 });
 const matWheel = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.7 });
@@ -103,8 +109,8 @@ const matLuggage = [
   new THREE.MeshStandardMaterial({ color: 0x74d3a3, emissive: 0x74d3a3, emissiveIntensity: 0.3, roughness: 0.6, flatShading: true }),
 ];
 const matGatePost = new THREE.MeshStandardMaterial({ color: 0x3a3a45, roughness: 0.5, metalness: 0.3 });
-const matGateBar = new THREE.MeshStandardMaterial({ color: 0xffb454, emissive: 0xff8a3c, emissiveIntensity: 1.2, roughness: 0.4 });
-const matGateBarDark = new THREE.MeshStandardMaterial({ color: 0x352a3a, roughness: 0.5 });
+const matGateBar = new THREE.MeshStandardMaterial({ color: 0xffb454, emissive: 0xff8a3c, emissiveIntensity: 1.4, roughness: 0.4 });
+const matGateStripe = new THREE.MeshStandardMaterial({ color: 0xf5f5f7, emissive: 0xffffff, emissiveIntensity: 0.6, roughness: 0.4 });
 const matTanker = new THREE.MeshStandardMaterial({ color: 0xaab3c2, emissive: 0x4a5060, emissiveIntensity: 0.45, roughness: 0.35, metalness: 0.5 });
 const matTankerStripe = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 1.1, roughness: 0.4 });
 const matMagnetBody = new THREE.MeshStandardMaterial({ color: 0xb0b4bd, emissive: 0x9aa2b8, emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.7 });
@@ -156,45 +162,20 @@ ground.rotation.x = -Math.PI / 2;
 ground.position.set(0, 0, -32);
 scene.add(ground);
 
-// faint lane dividers
-const laneStripes = [];
+// continuous lane guides: unlit lines read as glowing rails and fade into the
+// fog with distance. Dividers mark the 3 lanes; edge rails frame the track.
 for (const x of [-1.1, 1.1]) {
-  const s = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 220), matStripe);
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(0.09, 220), matLaneLine);
   s.rotation.x = -Math.PI / 2;
-  s.position.set(x, 0.01, -32);
+  s.position.set(x, 0.012, -32);
   scene.add(s);
-  laneStripes.push(s);
 }
-
-const WRAP_RANGE = DESPAWN_Z - SPAWN_Z;
-
-function makeWrapPool(count, spacing, build) {
-  const items = [];
-  for (let i = 0; i < count; i++) {
-    const mesh = build(i);
-    scene.add(mesh);
-    items.push({ mesh, z: SPAWN_Z + i * spacing });
-  }
-  return items;
+for (const x of [-3.32, 3.32]) {
+  const s = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 220), matEdgeLine);
+  s.rotation.x = -Math.PI / 2;
+  s.position.set(x, 0.012, -32);
+  scene.add(s);
 }
-
-const edgeLights = [];
-for (const side of [-1, 1]) {
-  const spacing = 3.6;
-  const count = Math.ceil(WRAP_RANGE / spacing);
-  for (let i = 0; i < count; i++) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.22, 0.5), i % 2 === 0 ? matEdgeA : matEdgeB);
-    mesh.position.set(side * 4.3, 0.11, SPAWN_Z + i * spacing);
-    scene.add(mesh);
-    edgeLights.push({ mesh, z: mesh.position.z, side, phase: rand(0, Math.PI * 2) });
-  }
-}
-
-const dashes = makeWrapPool(Math.ceil(WRAP_RANGE / 4.5), 4.5, () => {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.02, 1.0), matDash);
-  m.position.y = 0.011;
-  return m;
-});
 
 // distant control-tower silhouettes (slow parallax)
 const TOWER_SPACING = 46;
@@ -391,85 +372,113 @@ function buildCrabChar() {
   };
 }
 
-// Optimus-style humanoid — white panels over a dark under-suit, black visor,
-// pendulum run cycle on arm/leg pivots.
+// Optimus-style humanoid — white panels over a dark under-suit, black visor.
+// Articulated run: hip swing with knee flexion on the recovery leg, bent
+// elbows pumping opposite the legs, forward torso lean with a counter-twist,
+// and a two-beat bob (one per footfall).
 function buildOptimusChar() {
   const root = new THREE.Group();
   let t = rand(0, Math.PI * 2);
+
+  // torso group carries the upper body so the whole thing can lean and twist
+  const torsoG = new THREE.Group();
+  torsoG.position.y = 0.86;
+  root.add(torsoG);
+
   const skull = new THREE.Mesh(new THREE.SphereGeometry(0.13, 20, 14), matBotWhite);
   skull.scale.set(1, 1.12, 1.05);
-  skull.position.y = 1.52;
-  root.add(skull);
+  skull.position.y = 0.68;
+  torsoG.add(skull);
   const visor = new THREE.Mesh(new THREE.SphereGeometry(0.115, 18, 12), matVisor);
   visor.scale.set(0.92, 0.88, 0.62);
-  visor.position.set(0, 1.51, -0.075);
-  root.add(visor);
+  visor.position.set(0, 0.67, -0.075);
+  torsoG.add(visor);
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.1, 12), matBotDark);
-  neck.position.y = 1.4;
-  root.add(neck);
+  neck.position.y = 0.55;
+  torsoG.add(neck);
   const chest = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.34, 0.24), matBotWhite);
-  chest.position.y = 1.2;
-  root.add(chest);
+  chest.position.y = 0.35;
+  torsoG.add(chest);
   const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.03), matBotDark);
-  chestPlate.position.set(0, 1.14, -0.13);
-  root.add(chestPlate);
+  chestPlate.position.set(0, 0.29, -0.13);
+  torsoG.add(chestPlate);
   const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.2), matBotDark);
-  abdomen.position.y = 0.95;
-  root.add(abdomen);
+  abdomen.position.y = 0.1;
+  torsoG.add(abdomen);
   const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.14, 0.22), matBotWhite);
-  pelvis.position.y = 0.8;
-  root.add(pelvis);
-  const arms = [];
+  pelvis.position.y = -0.06;
+  torsoG.add(pelvis);
+
+  const shoulders = [], elbows = [];
   for (const side of [-1, 1]) {
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), matBotWhite);
-    shoulder.position.set(side * 0.29, 1.33, 0);
-    root.add(shoulder);
+    const pad = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), matBotWhite);
+    pad.position.set(side * 0.29, 0.47, 0);
+    torsoG.add(pad);
     const arm = new THREE.Group();
-    arm.position.set(side * 0.31, 1.31, 0);
+    arm.position.set(side * 0.31, 0.45, 0);
     const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.3, 12), matBotDark);
-    upper.position.y = -0.17;
+    upper.position.y = -0.16;
     arm.add(upper);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 10), matBotWhite);
-    elbow.position.y = -0.34;
-    arm.add(elbow);
+    const elbow = new THREE.Group();
+    elbow.position.y = -0.32;
+    const joint = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 10), matBotWhite);
+    elbow.add(joint);
     const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.26, 12), matBotWhite);
-    fore.position.y = -0.49;
-    arm.add(fore);
+    fore.position.y = -0.15;
+    elbow.add(fore);
     const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 12, 10), matBotDark);
-    hand.position.y = -0.64;
-    arm.add(hand);
-    root.add(arm);
-    arms.push(arm);
+    hand.position.y = -0.3;
+    elbow.add(hand);
+    arm.add(elbow);
+    torsoG.add(arm);
+    shoulders.push(arm);
+    elbows.push(elbow);
   }
-  const legs = [];
+
+  const hips = [], knees = [], feet = [];
   for (const side of [-1, 1]) {
     const leg = new THREE.Group();
-    leg.position.set(side * 0.12, 0.82, 0);
+    leg.position.set(side * 0.12, 0.84, 0);
     const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.34, 12), matBotWhite);
-    thigh.position.y = -0.19;
+    thigh.position.y = -0.18;
     leg.add(thigh);
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), matBotDark);
-    knee.position.y = -0.38;
-    leg.add(knee);
+    const knee = new THREE.Group();
+    knee.position.y = -0.37;
+    const joint = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), matBotDark);
+    knee.add(joint);
     const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.045, 0.32, 12), matBotDark);
-    shin.position.y = -0.54;
-    leg.add(shin);
+    shin.position.y = -0.17;
+    knee.add(shin);
     const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.06, 0.24), matBotWhite);
-    foot.position.set(0, -0.72, -0.05);
-    leg.add(foot);
+    foot.position.set(0, -0.35, -0.05);
+    knee.add(foot);
+    leg.add(knee);
     root.add(leg);
-    legs.push(leg);
+    hips.push(leg);
+    knees.push(knee);
+    feet.push(foot);
   }
+
   return {
     root,
     update(dt, spd) {
-      t += dt * (4 + spd * 0.55);
-      const swing = Math.sin(t);
-      arms[0].rotation.x = swing * 0.6;
-      arms[1].rotation.x = -swing * 0.6;
-      legs[0].rotation.x = -swing * 0.55;
-      legs[1].rotation.x = swing * 0.55;
-      root.position.y = Math.abs(Math.cos(t)) * 0.05;
+      t += dt * (5 + spd * 0.5);
+      const sw = Math.sin(t);
+      for (let i = 0; i < 2; i++) {
+        const ph = i * Math.PI; // legs half a cycle apart
+        const hipSwing = Math.sin(t + ph) * 0.7;
+        hips[i].rotation.x = hipSwing;
+        // knee flexes hardest mid-recovery (leg swinging back → forward)
+        knees[i].rotation.x = Math.max(0, Math.sin(t + ph + 2.1)) * 1.0;
+        // keep the foot roughly level with the ground through the stride
+        feet[i].rotation.x = -(hips[i].rotation.x + knees[i].rotation.x) * 0.55;
+        // arms pump opposite the same-side leg, elbows stay bent
+        shoulders[i].rotation.x = -Math.sin(t + ph) * 0.55;
+        elbows[i].rotation.x = 0.65 + Math.max(0, -Math.sin(t + ph)) * 0.25;
+      }
+      torsoG.rotation.x = -0.14;                 // forward racing lean
+      torsoG.rotation.y = sw * 0.09;             // shoulder counter-twist
+      root.position.y = Math.abs(Math.sin(t)) * 0.055; // one bob per footfall
     },
   };
 }
@@ -679,41 +688,51 @@ function buildCart() {
   return g;
 }
 
+// gate: one solid glowing bar across the whole lane with white hazard
+// stripes — reads as "duck under this" from far away
 function buildGate() {
   const g = new THREE.Group();
   for (const px of [-0.95, 0.95]) {
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.35, 8), matGatePost);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.35, 10), matGatePost);
     post.position.set(px, 0.68, 0);
     g.add(post);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), matGateBar);
+    cap.position.set(px, 1.4, 0);
+    g.add(cap);
   }
-  const segW = 0.34;
-  for (let i = -2; i <= 2; i++) {
-    const seg = new THREE.Mesh(new THREE.BoxGeometry(segW, 0.22, 0.16), i % 2 === 0 ? matGateBar : matGateBarDark);
-    seg.position.set(i * segW, 1.1, 0);
-    g.add(seg);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.34, 0.2), matGateBar);
+  bar.position.y = 1.12;
+  g.add(bar);
+  for (const sx of [-0.62, 0, 0.62]) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.36, 0.22), matGateStripe);
+    stripe.position.set(sx, 1.12, 0);
+    stripe.rotation.z = 0.5;
+    g.add(stripe);
   }
   return g;
 }
 
+// tanker: sized to its own lane (total span ~2.0 across) but tall enough to
+// clearly read as "can't jump this — change lanes"
 function buildTanker() {
   const g = new THREE.Group();
-  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.85, 14), matTanker);
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 1.1, 18), matTanker);
   tank.rotation.z = Math.PI / 2;
-  tank.position.y = 1.05;
+  tank.position.y = 0.95;
   g.add(tank);
-  const cap1 = new THREE.Mesh(new THREE.SphereGeometry(0.62, 12, 8), matTanker);
-  cap1.position.set(0.92, 1.05, 0);
+  const cap1 = new THREE.Mesh(new THREE.SphereGeometry(0.45, 14, 10), matTanker);
+  cap1.position.set(0.55, 0.95, 0);
   g.add(cap1);
   const cap2 = cap1.clone();
-  cap2.position.x = -0.92;
+  cap2.position.x = -0.55;
   g.add(cap2);
-  const stripeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.64, 0.64, 0.22, 14), matTankerStripe);
+  const stripeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.47, 0.47, 0.2, 18), matTankerStripe);
   stripeMesh.rotation.z = Math.PI / 2;
-  stripeMesh.position.y = 1.05;
+  stripeMesh.position.y = 0.95;
   g.add(stripeMesh);
-  for (const lx of [-0.55, 0.55]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.85), matWheel);
-    leg.position.set(lx, 0.28, 0);
+  for (const lx of [-0.42, 0.42]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.9, 0.7), matWheel);
+    leg.position.set(lx, 0.45, 0);
     g.add(leg);
   }
   return g;
@@ -723,7 +742,7 @@ const OBSTACLE_BUILDERS = { cart: buildCart, gate: buildGate, tanker: buildTanke
 const OBSTACLE_POOL_SIZE = { cart: 6, gate: 6, tanker: 4 };
 // visual-only enlargement so obstacles read clearly on a phone; collision
 // stays lane-based (COLLIDE_X/Z) and action-based (jump/slide), so scale is safe
-const OBSTACLE_SCALE = { cart: 1.35, gate: 1.22, tanker: 1.25 };
+const OBSTACLE_SCALE = { cart: 1.35, gate: 1.22, tanker: 1.0 };
 // ground glow under each obstacle, color-coded by the verb that beats it:
 // gold = jump (cart), magenta = slide (gate), red = change lanes (tanker)
 const MARKER_COLOR = { cart: GOLD, gate: ACCENT, tanker: 0xff4d6d };
@@ -846,6 +865,162 @@ function spawnMagnetPickup(lane, z = SPAWN_Z) {
 }
 
 // ---------------------------------------------------------------------------
+// Trains (Subway-Surfers core): long trams with a walkable roof.
+//  - parked: blocks the lane; dodge it, or land on its roof from above
+//  - moving: comes AT you faster than the world scrolls — headlights blazing
+//  - ramp: sloped nose; run straight into it and you ride up onto the roof
+// Model origin is the nose (largest z); cars extend toward -z.
+// ---------------------------------------------------------------------------
+const matTrainParked = new THREE.MeshStandardMaterial({ color: 0x5b84c4, emissive: 0x2c4166, emissiveIntensity: 0.7, roughness: 0.5, metalness: 0.2 });
+const matTrainMoving = new THREE.MeshStandardMaterial({ color: 0xc9564a, emissive: 0x6e2521, emissiveIntensity: 0.75, roughness: 0.5, metalness: 0.2 });
+const matTrainRamp = new THREE.MeshStandardMaterial({ color: 0x38bfa6, emissive: 0x16594d, emissiveIntensity: 0.7, roughness: 0.5, metalness: 0.2 });
+const matTrainRoof = new THREE.MeshStandardMaterial({ color: 0x4a5262, emissive: 0x232a36, emissiveIntensity: 0.6, roughness: 0.8 });
+const matTrainDark = new THREE.MeshStandardMaterial({ color: 0x14161c, roughness: 0.7 });
+const matTrainWin = new THREE.MeshStandardMaterial({ color: 0x1a1c22, emissive: 0xffd9a0, emissiveIntensity: 1.2, roughness: 0.4 });
+const matHeadlight = new THREE.MeshBasicMaterial({ color: 0xfff6d8 });
+const matRampSurf = new THREE.MeshStandardMaterial({ color: 0x6b7480, emissive: 0x2c333d, emissiveIntensity: 0.5, roughness: 0.6 });
+const matRampEdge = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x22d3ee, emissiveIntensity: 1.6, roughness: 0.4 });
+const TRAIN_STRIP_COLOR = { parked: 0xff4d6d, moving: 0xff4d6d, ramp: 0x22d3ee };
+
+function makeTrainCar(matBody) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.14, CAR_LEN - 0.24), matBody);
+  body.position.y = 0.78;
+  g.add(body);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.76, 0.14, CAR_LEN - 0.34), matTrainRoof);
+  roof.position.y = 1.42;
+  g.add(roof);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(1.94, 0.3, CAR_LEN - 1.1), matTrainWin);
+  win.position.y = 1.0;
+  g.add(win);
+  const skirt = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.26, CAR_LEN - 0.9), matTrainDark);
+  skirt.position.y = 0.13;
+  g.add(skirt);
+  return g;
+}
+
+// trains scroll with the world, so roof-ride time = length / speed; car
+// counts are chosen to give multi-second rides like the real thing
+function buildTrain(type) {
+  const g = new THREE.Group();
+  const matBody = type === 'parked' ? matTrainParked : type === 'moving' ? matTrainMoving : matTrainRamp;
+  const carCount = type === 'parked' ? 6 : type === 'ramp' ? 5 : 3;
+  const rampOffset = type === 'ramp' ? RAMP_LEN : 0;
+  const length = rampOffset + carCount * CAR_LEN;
+
+  for (let k = 0; k < carCount; k++) {
+    const car = makeTrainCar(matBody);
+    car.position.z = -(rampOffset + k * CAR_LEN + CAR_LEN / 2);
+    g.add(car);
+  }
+
+  if (type === 'ramp') {
+    const slopeLen = Math.hypot(RAMP_LEN, TRAIN_TOP);
+    const angle = Math.atan2(TRAIN_TOP, RAMP_LEN);
+    const surf = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, slopeLen), matRampSurf);
+    surf.rotation.x = angle;
+    surf.position.set(0, TRAIN_TOP / 2, -RAMP_LEN / 2);
+    g.add(surf);
+    for (const sx of [-0.86, 0.86]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, slopeLen), matRampEdge);
+      rail.rotation.x = angle;
+      rail.position.set(sx, TRAIN_TOP / 2 + 0.06, -RAMP_LEN / 2);
+      g.add(rail);
+    }
+  } else {
+    // flat nose face with a light bar
+    const face = new THREE.Mesh(new THREE.BoxGeometry(1.84, 1.2, 0.12), matBody);
+    face.position.set(0, 0.8, -0.02);
+    g.add(face);
+    const lightBar = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.1, 0.06), type === 'moving' ? matHeadlight : matTrainWin);
+    lightBar.position.set(0, 1.28, 0.03);
+    g.add(lightBar);
+  }
+
+  if (type === 'moving') {
+    for (const sx of [-0.5, 0.5]) {
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), matHeadlight);
+      lamp.position.set(sx, 0.62, 0.05);
+      g.add(lamp);
+    }
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: markerTex, color: 0xfff2cc, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    }));
+    glow.position.set(0, 0.7, 0.4);
+    glow.scale.set(3.4, 2.4, 1);
+    g.add(glow);
+  }
+
+  // color-coded under-glow running the full length (fog-proof, like markers)
+  const strip = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.9, length + 1.2),
+    new THREE.MeshBasicMaterial({ map: markerTex, color: TRAIN_STRIP_COLOR[type], transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+  );
+  strip.rotation.x = -Math.PI / 2;
+  strip.position.set(0, 0.018, -length / 2);
+  g.add(strip);
+
+  return { group: g, length };
+}
+
+const trains = [];
+const TRAIN_POOL = { parked: 3, moving: 2, ramp: 2 };
+for (const type of Object.keys(TRAIN_POOL)) {
+  for (let i = 0; i < TRAIN_POOL[type]; i++) {
+    const { group, length } = buildTrain(type);
+    group.visible = false;
+    scene.add(group);
+    trains.push({ group, length, type, active: false, lane: 1, z: SPAWN_Z, vRel: type === 'moving' ? MOVING_TRAIN_VREL : 0 });
+  }
+}
+
+function spawnTrain(type, lane, z = SPAWN_Z) {
+  const tr = trains.find((t) => t.type === type && !t.active);
+  if (!tr) return null;
+  tr.active = true;
+  tr.lane = lane;
+  tr.z = z;
+  tr.group.visible = true;
+  tr.group.position.set(LANES[lane], 0, z);
+  return tr;
+}
+
+function deactivateAllTrains() {
+  for (const tr of trains) { tr.active = false; tr.group.visible = false; }
+}
+
+// Height of whatever the player could stand on at z=0 in their current x.
+function computeSupport() {
+  let s = 0;
+  for (const tr of trains) {
+    if (!tr.active) continue;
+    if (Math.abs(laneX - LANES[tr.lane]) >= COLLIDE_X) continue;
+    const nose = tr.z;
+    const tail = tr.z - tr.length;
+    if (tr.type === 'ramp') {
+      if (nose >= 0 && nose <= RAMP_LEN) {
+        s = Math.max(s, TRAIN_TOP * (nose / RAMP_LEN));
+      } else if (nose > RAMP_LEN && tail <= 0) {
+        s = Math.max(s, TRAIN_TOP);
+      }
+    } else if (nose >= 0 && tail <= 0) {
+      s = Math.max(s, TRAIN_TOP);
+    }
+  }
+  return s;
+}
+
+function updateTrains(dt) {
+  for (const tr of trains) {
+    if (!tr.active) continue;
+    tr.z += (speed + tr.vRel) * dt;
+    tr.group.position.z = tr.z;
+    if (tr.z - tr.length > DESPAWN_Z) { tr.active = false; tr.group.visible = false; }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Pattern generator (pure — exposed for fuzz testing)
 // ---------------------------------------------------------------------------
 function generateWave(difficulty) {
@@ -880,6 +1055,18 @@ function waveGap(speed) {
 let difficultyT = 0;
 let magnetCountdown = MAGNET_CADENCE * 0.6;
 let waveCountdown = 2.2; // seconds until the first wave, in real time
+// distance value after which each lane is free again (trains are long, so a
+// lane with a train in it must not receive new spawns until it has scrolled by)
+const laneClearDist = [0, 0, 0];
+
+function laneBusy(i) { return distance < laneClearDist[i]; }
+
+function laneHasActiveObstacles(lane) {
+  for (const type of Object.keys(obstaclePools)) {
+    for (const o of obstaclePools[type]) if (o.active && o.lane === lane) return true;
+  }
+  return false;
+}
 
 function spawnWaveCoins(laneTypes, z) {
   for (let i = 0; i < 3; i++) {
@@ -901,6 +1088,67 @@ function spawnWaveCoins(laneTypes, z) {
   }
 }
 
+function spawnTrainCoins(tr) {
+  const x = LANES[tr.lane];
+  if (tr.type === 'ramp') {
+    // coins climbing the ramp, then a run along the roof
+    for (let k = 0; k < 4; k++) {
+      const u = (k + 1) / 5;
+      spawnCoinAt(x, TRAIN_TOP * u + 0.45, tr.z - RAMP_LEN * u);
+    }
+  }
+  if (tr.type !== 'moving') {
+    const roofStart = tr.z - (tr.type === 'ramp' ? RAMP_LEN : 0) - 1.2;
+    const roofEnd = tr.z - tr.length + 1.2;
+    for (let z = roofStart; z > roofEnd; z -= 2.0) {
+      spawnCoinAt(x, TRAIN_TOP + 0.45, z);
+    }
+  }
+}
+
+// A train section: 1-2 lanes get trains (mixed types), always leaving at
+// least one train-free lane so every section is survivable at ground level.
+function spawnTrainSection(difficulty) {
+  const lanes = [0, 1, 2].filter((i) => !laneBusy(i));
+  if (lanes.length < 2) return false;
+  for (let i = lanes.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+  }
+  const count = Math.min(lanes.length - 1, Math.random() < 0.35 + 0.45 * difficulty ? 2 : 1);
+  let spawned = 0;
+  for (let k = 0; k < count; k++) {
+    const lane = lanes[k];
+    const r = Math.random();
+    let type = r < 0.4 ? 'parked' : r < 0.75 ? 'ramp' : 'moving';
+    // an oncoming tram overtakes anything ahead of it in its lane, so it
+    // needs the lane visually empty; fall back to a parked one
+    if (type === 'moving' && laneHasActiveObstacles(lane)) type = 'parked';
+    const z = type === 'moving' ? SPAWN_Z - 24 : SPAWN_Z;
+    const tr = spawnTrain(type, lane, z);
+    if (!tr) continue;
+    spawnTrainCoins(tr);
+    let sectionLen = Math.abs(z) + tr.length;
+    // SS classic: a second train behind a ramp train, with a roof gap you
+    // jump across while riding high
+    if (type === 'ramp' && Math.random() < 0.5) {
+      const follow = spawnTrain('parked', lane, z - tr.length - 4.5);
+      if (follow) {
+        spawnTrainCoins(follow);
+        sectionLen += follow.length + 4.5;
+      }
+    }
+    laneClearDist[lane] = distance + sectionLen + 22;
+    spawned++;
+  }
+  // ground coins in a free lane as a breadcrumb toward safety
+  if (spawned > 0 && Math.random() < 0.6) {
+    const freeLane = lanes[lanes.length - 1];
+    for (let k = 0; k < 5; k++) spawnCoinAt(LANES[freeLane], 0.5, SPAWN_Z + 2 - k * 1.5);
+  }
+  return spawned > 0;
+}
+
 // Waves are generated on a real-time countdown; the minimum gap between
 // waves is expressed in world units by waveGap(speed) so the physical
 // reaction distance always scales with current speed (see generateWave).
@@ -910,18 +1158,31 @@ function updateSpawning(dt, speed) {
 
   waveCountdown -= dt;
   if (waveCountdown <= 0) {
-    const lanes = generateWave(difficulty);
-    for (let i = 0; i < 3; i++) {
-      if (lanes[i]) spawnObstacle(lanes[i], i, SPAWN_Z);
+    let trainSection = false;
+    if (difficulty > 0.08 && Math.random() < 0.3 + 0.3 * difficulty) {
+      trainSection = spawnTrainSection(difficulty);
     }
-    spawnWaveCoins(lanes, SPAWN_Z);
-    waveCountdown = waveGap(speed) / Math.max(1, speed);
+    if (!trainSection) {
+      const lanes = generateWave(difficulty);
+      const anyBusy = laneBusy(0) || laneBusy(1) || laneBusy(2);
+      for (let i = 0; i < 3; i++) {
+        if (!lanes[i]) continue;
+        if (laneBusy(i)) { lanes[i] = null; continue; }
+        // no un-passable walls in the remaining lanes while a train blocks
+        // others — a tanker+train pincer would be an unavoidable death
+        if (lanes[i] === 'tanker' && anyBusy) lanes[i] = 'cart';
+        spawnObstacle(lanes[i], i, SPAWN_Z);
+      }
+      spawnWaveCoins(lanes, SPAWN_Z);
+    }
+    waveCountdown = (waveGap(speed) / Math.max(1, speed)) * (trainSection ? 1.7 : 1);
   }
 
   magnetCountdown -= dt;
   if (magnetCountdown <= 0) {
     magnetCountdown = MAGNET_CADENCE;
-    spawnMagnetPickup((Math.random() * 3) | 0, SPAWN_Z - 4);
+    const freeLanes = [0, 1, 2].filter((i) => !laneBusy(i));
+    if (freeLanes.length > 0) spawnMagnetPickup(pick(freeLanes), SPAWN_Z - 4);
   }
 }
 
@@ -936,7 +1197,10 @@ let bankAngle = 0;
 
 let actionState = 'run';   // 'run' | 'jump' | 'slide' | 'slam'
 let actionT = 0;
-let playerY = 0;
+let airY = 0;              // jump/slam arc offset above the standing surface
+let playerElev = 0;        // height of the surface being stood on (train roofs)
+let elevVel = 0;           // vertical velocity while falling off a roof
+let playerY = 0;           // derived: playerElev + airY
 let slamStartY = 0;
 let queuedAction = null;
 let queuedAt = 0;
@@ -1002,7 +1266,7 @@ function consumeQueue() {
 
 function startJump() { actionState = 'jump'; actionT = 0; }
 function startSlide() { actionState = 'slide'; actionT = 0; }
-function startSlam() { actionState = 'slam'; actionT = 0; slamStartY = playerY; }
+function startSlam() { actionState = 'slam'; actionT = 0; slamStartY = airY; }
 
 function tryJump() {
   if (gameState !== 'playing') return;
@@ -1029,17 +1293,53 @@ function updateAction(dt) {
   actionT += dt;
   if (actionState === 'jump') {
     const t = Math.min(actionT / JUMP_DURATION, 1);
-    playerY = 4 * JUMP_HEIGHT * t * (1 - t);
-    if (t >= 1) { actionState = 'run'; actionT = 0; playerY = 0; consumeQueue(); }
+    airY = 4 * JUMP_HEIGHT * t * (1 - t);
+    if (t >= 1) { actionState = 'run'; actionT = 0; airY = 0; consumeQueue(); }
   } else if (actionState === 'slam') {
     const t = Math.min(actionT / SLAM_DURATION, 1);
-    playerY = slamStartY * (1 - t);
-    if (t >= 1) { playerY = 0; startSlide(); }
+    airY = slamStartY * (1 - t);
+    if (t >= 1) { airY = 0; startSlide(); }
   } else if (actionState === 'slide') {
     if (actionT >= SLIDE_DURATION) { actionState = 'run'; actionT = 0; consumeQueue(); }
   } else {
-    playerY = 0;
+    airY = 0;
   }
+}
+
+function landFromAir() {
+  airY = 0;
+  if (actionState === 'slam') startSlide();
+  else { actionState = 'run'; actionT = 0; consumeQueue(); }
+}
+
+// Reconcile the player's height with whatever is underneath: climb ramps,
+// land on roofs (or smack into a train face), fall off the end of a train.
+function updateVertical(dt) {
+  const s = computeSupport();
+  const abs = playerElev + airY;
+  if (isAirborne()) {
+    if (s > playerElev + 0.01) {
+      if (abs >= s - 0.45 && abs <= s + 0.1) {
+        playerElev = s;
+        elevVel = 0;
+        landFromAir();
+      } else if (abs < s - 0.45) {
+        crash(); // jumped straight into the train's face
+      }
+    }
+  } else {
+    const d = s - playerElev;
+    if (d > WALL_STEP) { crash(); return; } // ran into a wall (train nose/side)
+    if (d >= 0) {
+      playerElev = s;
+      elevVel = 0;
+    } else {
+      elevVel -= GRAVITY * dt;
+      playerElev = Math.max(s, playerElev + elevVel * dt);
+      if (playerElev === s) elevVel = 0;
+    }
+  }
+  playerY = playerElev + airY;
 }
 
 // ---------------------------------------------------------------------------
@@ -1092,6 +1392,7 @@ function updateCollisions(dt) {
       o.mesh.position.z = o.z;
       if (o.z > DESPAWN_Z) { o.active = false; o.mesh.visible = false; continue; }
       if (o.passed) continue;
+      if (playerElev > 1.0) continue; // running on a train roof, above ground obstacles
       const dx = Math.abs(laneX - LANES[o.lane]);
       if (Math.abs(o.z) < COLLIDE_Z) {
         if (dx < COLLIDE_X) {
@@ -1126,7 +1427,9 @@ function updateCollisions(dt) {
     c.mesh.rotation.y += c.spin * dt;
     if (c.z > DESPAWN_Z) { c.active = false; c.mesh.visible = false; continue; }
     const dx = Math.abs(laneX - c.x);
-    if (Math.abs(c.z) < 0.75 && dx < 0.75) collectCoin(c);
+    // vertical check keeps roof coins for roof runners and jump-arc coins
+    // for jumpers (player "center" sits ~0.55 above their feet)
+    if (Math.abs(c.z) < 0.75 && dx < 0.75 && Math.abs(playerY + 0.55 - c.y) < 1.0) collectCoin(c);
   }
 
   for (const m of magnetPickups) {
@@ -1167,14 +1470,20 @@ function finishCrash() {
 function resetWorld() {
   deactivateAllObstacles();
   deactivateAllCoins();
+  deactivateAllTrains();
   for (const m of magnetPickups) { m.active = false; m.mesh.visible = false; }
+  laneClearDist[0] = laneClearDist[1] = laneClearDist[2] = 0;
   laneIndex = 1;
   laneX = 0;
   laneTargetX = 0;
   bankAngle = 0;
   actionState = 'run';
   actionT = 0;
+  airY = 0;
+  playerElev = 0;
+  elevVel = 0;
   playerY = 0;
+  camElev = 0;
   queuedAction = null;
   playT = 0;
   speed = BASE_SPEED;
@@ -1299,18 +1608,6 @@ function updatePlayerVisual(dt) {
 }
 
 function updateEnvironment(dt, envSpeed) {
-  for (const e of edgeLights) {
-    e.z += envSpeed * dt;
-    if (e.z > DESPAWN_Z) e.z -= WRAP_RANGE;
-    e.mesh.position.z = e.z;
-    const pulse = 0.85 + 0.35 * Math.sin(performance.now() * 0.003 + e.phase);
-    e.mesh.scale.setScalar(pulse);
-  }
-  for (const d of dashes) {
-    d.z += envSpeed * dt;
-    if (d.z > DESPAWN_Z) d.z -= WRAP_RANGE;
-    d.mesh.position.z = d.z;
-  }
   for (const t of towers) {
     t.z += envSpeed * 0.22 * dt;
     if (t.z > 40) t.z -= TOWER_RANGE;
@@ -1322,6 +1619,8 @@ function updateEnvironment(dt, envSpeed) {
 function updateCamera(dt) {
   const camGoalX = laneX * 0.6;
   camX += (camGoalX - camX) * Math.min(1, dt * CAM_LAG_RATE);
+  // ride up smoothly when the player is on a train roof
+  camElev += (playerElev * 0.8 - camElev) * Math.min(1, dt * 3.5);
 
   const speedT = clamp01((speed - BASE_SPEED) / (MAX_SPEED - BASE_SPEED));
   const fov = BASE_FOV + speedT * FOV_BONUS;
@@ -1330,10 +1629,11 @@ function updateCamera(dt) {
   camShakeAmt = Math.max(0, camShakeAmt - dt * 3.2);
   const shx = (Math.random() - 0.5) * camShakeAmt;
   const shy = (Math.random() - 0.5) * camShakeAmt;
-  camera.position.set(camX + shx, CAM_UP + shy, CAM_BACK);
-  camera.lookAt(camX * 0.5, 1.5, -13);
+  camera.position.set(camX + shx, CAM_UP + shy + camElev, CAM_BACK);
+  camera.lookAt(camX * 0.5, 1.5 + camElev * 0.85, -13);
 }
 let camX = 0;
+let camElev = 0;
 
 // ---------------------------------------------------------------------------
 // Main loop
@@ -1372,6 +1672,8 @@ function tick(now) {
     distance += speed * sdt;
 
     updateAction(sdt);
+    updateTrains(sdt);
+    updateVertical(sdt);
     updateSpawning(sdt, speed);
     updateCollisions(sdt);
 
@@ -1463,7 +1765,7 @@ window.__test = {
     return {
       gameState, distance: Math.floor(distance), miles, speed,
       laneIndex, laneX, playerY, actionState, magnetActive, magnetTimer, best,
-      runner: runnerId,
+      runner: runnerId, elevation: playerElev, support: computeSupport(),
     };
   },
   setRunner(id) { selectRunner(id); syncPicker(); },
@@ -1479,6 +1781,8 @@ window.__test = {
   jump() { tryJump(); },
   slide() { trySlide(); },
   forceSpawn(type, lane = laneIndex, z = -1.2) { return spawnObstacle(type, lane, z); },
+  forceTrain(type, lane = laneIndex, z = -10) { return spawnTrain(type, lane, z); },
+  clearTrains() { deactivateAllTrains(); },
   forceMagnet(lane = laneIndex, z = -1.2) { return spawnMagnetPickup(lane, z); },
   forceCoin(lane = laneIndex, z = -1.2) { return spawnCoinAt(LANES[lane], 0.5, z); },
   clearObstacles() { deactivateAllObstacles(); },

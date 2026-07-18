@@ -1,4 +1,4 @@
-const CACHE = 'am-runway-v4';
+const CACHE = 'am-runway-v5';
 
 const ASSETS = [
   './',
