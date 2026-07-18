@@ -44,6 +44,12 @@
       <div class="overlay-card">
         <h1 class="title">Runway</h1>
         <p class="tagline"><span class="if-touch">swipe to dodge · jump · slide</span><span class="if-key">← → to dodge · ↑ jump · ↓ slide</span></p>
+        <div class="picker" id="runner-picker" role="group" aria-label="Choose your runner">
+          <button class="picker-btn" type="button" data-runner="case"><span class="picker-icon">🧳</span><span class="picker-name">Case</span></button>
+          <button class="picker-btn" type="button" data-runner="ufo"><span class="picker-icon">🛸</span><span class="picker-name">UFO</span></button>
+          <button class="picker-btn" type="button" data-runner="plane"><span class="picker-icon">✈️</span><span class="picker-name">Plane</span></button>
+          <button class="picker-btn" type="button" data-runner="rocket"><span class="picker-icon">🚀</span><span class="picker-name">Rocket</span></button>
+        </div>
         <div class="cta"><span class="if-touch">tap to start</span><span class="if-key">press Space to start</span></div>
         <button class="install-btn" id="install" type="button" hidden>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>

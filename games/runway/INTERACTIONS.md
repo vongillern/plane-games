@@ -1,11 +1,14 @@
 # Runway — Interaction Guide
 
 ## Mental model
-"I'm the runner." The player identifies with the rolling suitcase and thinks in
-lanes: *left / middle / right*, plus two evasive verbs, *jump* and *slide*. They
-never think about the camera or speed — those are the game's job. Obstacles are
-read by silhouette at a distance: low box = jump it, barrier with a gap under
-the bar = slide it, huge tanker = change lanes.
+"I'm the runner." The player identifies with their chosen runner (rolling
+suitcase, UFO, prop plane, or rocket — picked on the start screen, remembered
+across visits) and thinks in lanes: *left / middle / right*, plus two evasive
+verbs, *jump* and *slide*. They never think about the camera or speed — those
+are the game's job. Obstacles are read two ways at a distance: by silhouette
+(low box = jump it, barrier with a gap under the bar = slide it, huge tanker =
+change lanes) and by a fog-proof glow on the ground under each one, color-coded
+by the verb that beats it: gold = jump, magenta = slide, red = change lanes.
 
 ## Inputs (touch first)
 - **Swipe left / right** → change lane (one lane per swipe, clamped at edges).

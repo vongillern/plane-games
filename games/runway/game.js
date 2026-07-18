@@ -56,7 +56,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.background = makeSkyTexture();
-scene.fog = new THREE.Fog(0x431a4a, 20, 88);
+scene.fog = new THREE.Fog(0x431a4a, 26, 130);
 
 // Big soft glow sitting right at the vanishing point, selling the dusk horizon.
 const horizonGlow = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -69,7 +69,7 @@ scene.add(horizonGlow);
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 260);
 camera.position.set(0, CAM_UP, CAM_BACK);
 
-const hemi = new THREE.HemisphereLight(0xff9de2, 0x140a1e, 0.75);
+const hemi = new THREE.HemisphereLight(0xff9de2, 0x140a1e, 0.9);
 scene.add(hemi);
 const key = new THREE.DirectionalLight(0xffe3f6, 1.05);
 key.position.set(-4, 10, 4);
@@ -82,7 +82,7 @@ scene.add(rim);
 // Shared geometries / materials
 // ---------------------------------------------------------------------------
 const wheelGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.09, 10);
-const coinGeo = new THREE.OctahedronGeometry(0.42, 0);
+const coinGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.07, 24);
 const debrisGeo = new THREE.BoxGeometry(0.22, 0.16, 0.16);
 
 const matGround = new THREE.MeshStandardMaterial({ color: 0x171025, roughness: 0.95, metalness: 0.0 });
@@ -91,22 +91,22 @@ const matDash = new THREE.MeshStandardMaterial({ color: 0xffe9c7, emissive: 0xff
 const matEdgeA = new THREE.MeshStandardMaterial({ color: 0x1a0a1a, emissive: ACCENT, emissiveIntensity: 1.4, roughness: 0.6 });
 const matEdgeB = new THREE.MeshStandardMaterial({ color: 0x1a1408, emissive: GOLD, emissiveIntensity: 1.1, roughness: 0.6 });
 const matTower = new THREE.MeshStandardMaterial({ color: 0x140a22, roughness: 1, emissive: 0x1a0e2c, emissiveIntensity: 0.3 });
-const matCoin = new THREE.MeshStandardMaterial({ color: GOLD, emissive: GOLD, emissiveIntensity: 0.55, roughness: 0.3, metalness: 0.4 });
+const matCoin = new THREE.MeshStandardMaterial({ color: GOLD, emissive: GOLD, emissiveIntensity: 0.7, roughness: 0.3, metalness: 0.4 });
 const matWheel = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.7 });
 const matHandle = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.35, metalness: 0.4 });
 const matBody = new THREE.MeshStandardMaterial({ color: AMBER, roughness: 0.45, metalness: 0.08, flatShading: true });
 const matTrim = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.4, roughness: 0.4, flatShading: true });
-const matCart = new THREE.MeshStandardMaterial({ color: 0x39424f, roughness: 0.7, flatShading: true });
+const matCart = new THREE.MeshStandardMaterial({ color: 0x55677a, emissive: 0x22303c, emissiveIntensity: 0.5, roughness: 0.7, flatShading: true });
 const matLuggage = [
-  new THREE.MeshStandardMaterial({ color: 0xef6c8e, roughness: 0.6, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x5aa9e6, roughness: 0.6, flatShading: true }),
-  new THREE.MeshStandardMaterial({ color: 0x74d3a3, roughness: 0.6, flatShading: true }),
+  new THREE.MeshStandardMaterial({ color: 0xef6c8e, emissive: 0xef6c8e, emissiveIntensity: 0.3, roughness: 0.6, flatShading: true }),
+  new THREE.MeshStandardMaterial({ color: 0x5aa9e6, emissive: 0x5aa9e6, emissiveIntensity: 0.3, roughness: 0.6, flatShading: true }),
+  new THREE.MeshStandardMaterial({ color: 0x74d3a3, emissive: 0x74d3a3, emissiveIntensity: 0.3, roughness: 0.6, flatShading: true }),
 ];
-const matGatePost = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.5, metalness: 0.3 });
-const matGateBar = new THREE.MeshStandardMaterial({ color: 0xffb454, emissive: 0xff8a3c, emissiveIntensity: 0.65, roughness: 0.4 });
-const matGateBarDark = new THREE.MeshStandardMaterial({ color: 0x171018, roughness: 0.5 });
-const matTanker = new THREE.MeshStandardMaterial({ color: 0x8b93a0, roughness: 0.35, metalness: 0.5 });
-const matTankerStripe = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.6, roughness: 0.4 });
+const matGatePost = new THREE.MeshStandardMaterial({ color: 0x3a3a45, roughness: 0.5, metalness: 0.3 });
+const matGateBar = new THREE.MeshStandardMaterial({ color: 0xffb454, emissive: 0xff8a3c, emissiveIntensity: 1.2, roughness: 0.4 });
+const matGateBarDark = new THREE.MeshStandardMaterial({ color: 0x352a3a, roughness: 0.5 });
+const matTanker = new THREE.MeshStandardMaterial({ color: 0xaab3c2, emissive: 0x4a5060, emissiveIntensity: 0.45, roughness: 0.35, metalness: 0.5 });
+const matTankerStripe = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 1.1, roughness: 0.4 });
 const matMagnetBody = new THREE.MeshStandardMaterial({ color: 0xb0b4bd, emissive: 0x9aa2b8, emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.7 });
 const matMagnetTip = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0xff4d6d, emissiveIntensity: 0.6, roughness: 0.4 });
 const debrisColors = [0xff6b81, 0x4fd1c5, 0xffe66d, 0xf5f5f7, 0x9d8cff];
@@ -272,37 +272,198 @@ function updatePlane(dt) {
 }
 
 // ---------------------------------------------------------------------------
-// Player: rolling suitcase
+// Player: four selectable runners with radically different silhouettes.
+// Each builder returns { root, update(dt, speed) }; the root gets the slide
+// squash + bank, so any character works with the same action state machine.
 // ---------------------------------------------------------------------------
-const player = new THREE.Group();
-const chassis = new THREE.Group();
-const body = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.0, 0.6), matBody);
-body.position.y = 0.58;
-chassis.add(body);
-const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.97, 0.15, 0.64), matTrim);
-stripe.position.y = 0.58;
-chassis.add(stripe);
-const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.42, 8), matHandle);
-handleBar.rotation.z = Math.PI / 2;
-handleBar.position.set(0, 1.2, -0.02);
-chassis.add(handleBar);
-for (const sx of [-0.16, 0.16]) {
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 6), matHandle);
-  post.position.set(sx, 1.05, -0.02);
-  chassis.add(post);
-}
-player.add(chassis);
+const matSaucerHull = new THREE.MeshStandardMaterial({ color: 0x9aa7b8, roughness: 0.3, metalness: 0.7, flatShading: true });
+const matSaucerDome = new THREE.MeshStandardMaterial({ color: 0x67e8f9, emissive: 0x22d3ee, emissiveIntensity: 0.8, transparent: true, opacity: 0.85, roughness: 0.2 });
+const matSaucerRing = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x22d3ee, emissiveIntensity: 1.4, roughness: 0.4 });
+const matBeam = new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+const matPlaneBody = new THREE.MeshStandardMaterial({ color: 0xf5f5f7, roughness: 0.35, metalness: 0.1, flatShading: true });
+const matPlaneTrim = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0xff4d6d, emissiveIntensity: 0.3, roughness: 0.45, flatShading: true });
+const matFlame = new THREE.MeshBasicMaterial({ color: 0xffb454, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
 
-const wheelsGroup = new THREE.Group();
-const wheels = [];
-for (const [wx, wz] of [[-0.4, 0.26], [0.4, 0.26], [-0.4, -0.26], [0.4, -0.26]]) {
-  const w = new THREE.Mesh(wheelGeo, matWheel);
-  w.rotation.z = Math.PI / 2;
-  w.position.set(wx, 0.12, wz);
-  wheelsGroup.add(w);
-  wheels.push(w);
+function buildSuitcaseChar() {
+  const root = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.0, 0.6), matBody);
+  body.position.y = 0.58;
+  root.add(body);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.97, 0.15, 0.64), matTrim);
+  stripe.position.y = 0.58;
+  root.add(stripe);
+  const handleBar = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.42, 8), matHandle);
+  handleBar.rotation.z = Math.PI / 2;
+  handleBar.position.set(0, 1.2, -0.02);
+  root.add(handleBar);
+  for (const sx of [-0.16, 0.16]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.32, 6), matHandle);
+    post.position.set(sx, 1.05, -0.02);
+    root.add(post);
+  }
+  const wheels = [];
+  for (const [wx, wz] of [[-0.4, 0.26], [0.4, 0.26], [-0.4, -0.26], [0.4, -0.26]]) {
+    const w = new THREE.Mesh(wheelGeo, matWheel);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(wx, 0.12, wz);
+    root.add(w);
+    wheels.push(w);
+  }
+  return {
+    root,
+    update(dt, spd) {
+      const spin = spd * dt * 4.2;
+      for (const w of wheels) w.rotation.x += spin;
+    },
+  };
 }
-player.add(wheelsGroup);
+
+function buildUfoChar() {
+  const root = new THREE.Group();
+  let t = rand(0, Math.PI * 2);
+  const hull = new THREE.Mesh(new THREE.SphereGeometry(0.66, 20, 12), matSaucerHull);
+  hull.scale.y = 0.38;
+  hull.position.y = 0.6;
+  root.add(hull);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), matSaucerDome);
+  dome.position.y = 0.72;
+  root.add(dome);
+  const spinner = new THREE.Group();
+  spinner.position.y = 0.6;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.045, 8, 28), matSaucerRing);
+  ring.rotation.x = Math.PI / 2;
+  spinner.add(ring);
+  const podGeo = new THREE.SphereGeometry(0.07, 8, 6);
+  for (let i = 0; i < 4; i++) {
+    const pod = new THREE.Mesh(podGeo, matSaucerRing);
+    const a = (i / 4) * Math.PI * 2;
+    pod.position.set(Math.cos(a) * 0.72, 0, Math.sin(a) * 0.72);
+    spinner.add(pod);
+  }
+  root.add(spinner);
+  const beam = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.5, 12, 1, true), matBeam);
+  beam.position.y = 0.26;
+  root.add(beam);
+  return {
+    root,
+    update(dt) {
+      t += dt;
+      spinner.rotation.y += dt * 5;
+      root.position.y = 0.14 + Math.sin(t * 3) * 0.05;
+    },
+  };
+}
+
+function buildPlaneChar() {
+  const root = new THREE.Group();
+  const fus = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.2, 1.15, 10), matPlaneBody);
+  fus.rotation.x = Math.PI / 2;
+  fus.position.y = 0.62;
+  root.add(fus);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.35, 10), matPlaneTrim);
+  nose.rotation.x = -Math.PI / 2;
+  nose.position.set(0, 0.62, -0.75);
+  root.add(nose);
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.06, 0.44), matPlaneBody);
+  wing.position.set(0, 0.56, -0.05);
+  root.add(wing);
+  for (const sx of [-0.94, 0.94]) {
+    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.46), matPlaneTrim);
+    tip.position.set(sx, 0.56, -0.05);
+    root.add(tip);
+  }
+  const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.42, 0.3), matPlaneTrim);
+  tailFin.position.set(0, 0.92, 0.5);
+  root.add(tailFin);
+  const stab = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.26), matPlaneTrim);
+  stab.position.set(0, 0.76, 0.52);
+  root.add(stab);
+  const prop = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.95, 0.05), matHandle);
+  prop.position.set(0, 0.62, -0.96);
+  root.add(prop);
+  const wheels = [];
+  for (const [wx, wz] of [[-0.34, 0.1], [0.34, 0.1], [0, -0.6]]) {
+    const w = new THREE.Mesh(wheelGeo, matWheel);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(wx, 0.12, wz);
+    root.add(w);
+    wheels.push(w);
+  }
+  return {
+    root,
+    update(dt, spd) {
+      prop.rotation.z += (18 + spd) * dt;
+      const spin = spd * dt * 4.2;
+      for (const w of wheels) w.rotation.x += spin;
+    },
+  };
+}
+
+function buildRocketChar() {
+  const root = new THREE.Group();
+  let t = rand(0, Math.PI * 2);
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.36, 1.05, 12), matPlaneBody);
+  body.position.y = 0.95;
+  root.add(body);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.55, 12), matPlaneTrim);
+  nose.position.y = 1.72;
+  root.add(nose);
+  const port = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 12), matSaucerDome);
+  port.rotation.x = Math.PI / 2;
+  port.position.set(0, 1.1, 0.31);
+  root.add(port);
+  const finGeo = new THREE.BoxGeometry(0.07, 0.55, 0.34);
+  for (let i = 0; i < 3; i++) {
+    const holder = new THREE.Group();
+    holder.rotation.y = (i / 3) * Math.PI * 2;
+    const fin = new THREE.Mesh(finGeo, matPlaneTrim);
+    fin.position.set(0, 0.52, 0.42);
+    holder.add(fin);
+    root.add(holder);
+  }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.55, 10), matFlame);
+  flame.rotation.x = Math.PI;
+  flame.position.y = 0.3;
+  root.add(flame);
+  return {
+    root,
+    update(dt) {
+      t += dt;
+      const f = 0.75 + 0.3 * Math.sin(t * 26) + 0.12 * Math.sin(t * 13.7);
+      flame.scale.set(1, Math.max(0.4, f), 1);
+      root.position.y = 0.14 + Math.sin(t * 2.6) * 0.05;
+    },
+  };
+}
+
+const RUNNER_KEY = 'am.runway.runner';
+const CHARACTER_BUILDERS = { case: buildSuitcaseChar, ufo: buildUfoChar, plane: buildPlaneChar, rocket: buildRocketChar };
+
+const player = new THREE.Group();
+const characters = {};
+for (const [id, build] of Object.entries(CHARACTER_BUILDERS)) {
+  const ch = build();
+  ch.root.visible = false;
+  player.add(ch.root);
+  characters[id] = ch;
+}
+let runnerId = localStorage.getItem(RUNNER_KEY);
+if (!characters[runnerId]) runnerId = 'case';
+let activeChar = characters[runnerId];
+activeChar.root.visible = true;
+
+function selectRunner(id) {
+  if (!characters[id] || id === runnerId) return;
+  activeChar.root.visible = false;
+  activeChar.root.scale.y = 1;
+  activeChar.root.rotation.x = 0;
+  activeChar.root.position.y = 0;
+  runnerId = id;
+  activeChar = characters[id];
+  activeChar.root.visible = true;
+  localStorage.setItem(RUNNER_KEY, id);
+}
+
 player.scale.setScalar(1.08);
 
 const magnetRing = new THREE.Mesh(
@@ -429,12 +590,38 @@ const OBSTACLE_POOL_SIZE = { cart: 6, gate: 6, tanker: 4 };
 // visual-only enlargement so obstacles read clearly on a phone; collision
 // stays lane-based (COLLIDE_X/Z) and action-based (jump/slide), so scale is safe
 const OBSTACLE_SCALE = { cart: 1.35, gate: 1.22, tanker: 1.25 };
+// ground glow under each obstacle, color-coded by the verb that beats it:
+// gold = jump (cart), magenta = slide (gate), red = change lanes (tanker)
+const MARKER_COLOR = { cart: GOLD, gate: ACCENT, tanker: 0xff4d6d };
 const obstaclePools = { cart: [], gate: [], tanker: [] };
+
+function makeMarkerTexture() {
+  const s = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.55, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, s, s);
+  return new THREE.CanvasTexture(c);
+}
+const markerTex = makeMarkerTexture();
 
 for (const type of Object.keys(OBSTACLE_BUILDERS)) {
   for (let i = 0; i < OBSTACLE_POOL_SIZE[type]; i++) {
     const mesh = OBSTACLE_BUILDERS[type]();
     mesh.scale.setScalar(OBSTACLE_SCALE[type]);
+    // fog:false keeps the marker readable all the way out at the spawn line
+    const marker = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.35, 1.9),
+      new THREE.MeshBasicMaterial({ map: markerTex, color: MARKER_COLOR[type], transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+    );
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.y = 0.02;
+    mesh.add(marker);
     mesh.visible = false;
     scene.add(mesh);
     obstaclePools[type].push({ mesh, active: false, lane: 1, z: SPAWN_Z, passed: false, type });
@@ -467,6 +654,10 @@ const COIN_POOL_SIZE = 64;
 const coins = [];
 for (let i = 0; i < COIN_POOL_SIZE; i++) {
   const mesh = new THREE.Mesh(coinGeo, matCoin);
+  // stand the cylinder up on its edge, then spin it around the world Y axis
+  // like an arcade coin (YXZ order applies the spin before the upright tilt)
+  mesh.rotation.order = 'YXZ';
+  mesh.rotation.x = Math.PI / 2;
   mesh.visible = false;
   scene.add(mesh);
   coins.push({ mesh, active: false, x: 0, y: 0.5, z: SPAWN_Z, spin: rand(2, 4) });
@@ -905,9 +1096,24 @@ canvas.addEventListener('pointerup', (e) => {
 canvas.addEventListener('pointercancel', () => { tracking = false; });
 
 startOverlay.addEventListener('pointerup', (e) => {
-  if (e.target.closest('#install') || e.target.closest('.install-tip')) return;
+  if (e.target.closest('#install') || e.target.closest('.install-tip') || e.target.closest('#runner-picker')) return;
   handleTapRestart();
 });
+
+// Runner picker (start overlay) — swaps the live model behind the overlay
+const pickerEl = document.getElementById('runner-picker');
+function syncPicker() {
+  for (const b of pickerEl.querySelectorAll('.picker-btn')) {
+    b.classList.toggle('selected', b.dataset.runner === runnerId);
+  }
+}
+pickerEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.picker-btn');
+  if (!btn) return;
+  selectRunner(btn.dataset.runner);
+  syncPicker();
+});
+syncPicker();
 overOverlay.addEventListener('pointerup', (e) => {
   if (e.target.closest('#restart')) return; // handled by its own click
   handleTapRestart();
@@ -944,11 +1150,11 @@ function updatePlayerVisual(dt) {
   player.rotation.z = bankAngle;
 
   const targetScaleY = actionState === 'slide' ? 0.42 : 1;
-  chassis.scale.y += (targetScaleY - chassis.scale.y) * Math.min(1, dt * 14);
-  chassis.rotation.x += ((actionState === 'slide' ? -0.16 : 0) - chassis.rotation.x) * Math.min(1, dt * 14);
+  const charRoot = activeChar.root;
+  charRoot.scale.y += (targetScaleY - charRoot.scale.y) * Math.min(1, dt * 14);
+  charRoot.rotation.x += ((actionState === 'slide' ? -0.16 : 0) - charRoot.rotation.x) * Math.min(1, dt * 14);
 
-  const wheelSpin = speed * dt * 4.2;
-  for (const w of wheels) w.rotation.x += wheelSpin;
+  activeChar.update(dt, speed);
 
   magnetRing.visible = magnetActive;
   if (magnetActive) {
@@ -1123,8 +1329,11 @@ window.__test = {
     return {
       gameState, distance: Math.floor(distance), miles, speed,
       laneIndex, laneX, playerY, actionState, magnetActive, magnetTimer, best,
+      runner: runnerId,
     };
   },
+  setRunner(id) { selectRunner(id); syncPicker(); },
+  listRunners() { return Object.keys(characters); },
   start() { startGame(); },
   restart() { startGame(); },
   moveLeft() { changeLane(-1); },
