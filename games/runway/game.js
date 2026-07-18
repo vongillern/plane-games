@@ -29,9 +29,17 @@ const COLLIDE_Z = 0.55;
 const COLLIDE_X = 0.85;
 const NEARMISS_X = 1.6;
 
-const MAGNET_CADENCE = 30;               // seconds between magnet spawns
+const PICKUP_CADENCE = 20;               // seconds between powerup spawns
 const MAGNET_DURATION = 6;
 const MAGNET_RADIUS = 4.5;
+const JETPACK_DURATION = 5.5;
+const JET_HEIGHT = 4.2;                  // cruise altitude while jetpacking
+const SNEAKERS_DURATION = 8;
+const SNEAKERS_JUMP = 2.7;               // boosted jump clears tankers and lands on roofs
+const MULT_DURATION = 15;                // 2x score powerup
+const SHIELD_DURATION = 20;              // hoverboard: absorbs one crash
+const STUMBLE_WINDOW = 8;                // guard chases this long after a stumble
+const KEYS_KEY = 'am.runway.keys';
 
 // trains (Subway-Surfers style trams)
 const TRAIN_TOP = 1.5;                   // roof height you run on
@@ -115,6 +123,14 @@ const matTanker = new THREE.MeshStandardMaterial({ color: 0xaab3c2, emissive: 0x
 const matTankerStripe = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 1.1, roughness: 0.4 });
 const matMagnetBody = new THREE.MeshStandardMaterial({ color: 0xb0b4bd, emissive: 0x9aa2b8, emissiveIntensity: 0.35, roughness: 0.3, metalness: 0.7 });
 const matMagnetTip = new THREE.MeshStandardMaterial({ color: 0xff4d6d, emissive: 0xff4d6d, emissiveIntensity: 0.6, roughness: 0.4 });
+const matBoxGold = new THREE.MeshStandardMaterial({ color: GOLD, emissive: GOLD, emissiveIntensity: 0.5, roughness: 0.4 });
+const matBoxRibbon = new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.7, roughness: 0.4 });
+const matJetMetal = new THREE.MeshStandardMaterial({ color: 0xb0b4bd, emissive: 0x555a66, emissiveIntensity: 0.4, roughness: 0.3, metalness: 0.7 });
+const matJetNozzle = new THREE.MeshStandardMaterial({ color: 0xff8a3c, emissive: 0xff8a3c, emissiveIntensity: 0.9, roughness: 0.4 });
+const matSneaker = new THREE.MeshStandardMaterial({ color: 0xf5f5f7, emissive: 0x9aa0aa, emissiveIntensity: 0.25, roughness: 0.5 });
+const matSole = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x22d3ee, emissiveIntensity: 1.2, roughness: 0.4 });
+const matBooster = new THREE.MeshStandardMaterial({ color: GOLD, emissive: 0xffd35e, emissiveIntensity: 1.2, roughness: 0.3 });
+const matBoard = new THREE.MeshStandardMaterial({ color: 0x22d3ee, emissive: 0x22d3ee, emissiveIntensity: 0.9, roughness: 0.4 });
 const debrisColors = [0xff6b81, 0x4fd1c5, 0xffe66d, 0xf5f5f7, 0x9d8cff];
 
 // ---------------------------------------------------------------------------
@@ -618,7 +634,132 @@ magnetRing.position.y = 0.03;
 magnetRing.visible = false;
 player.add(magnetRing);
 
+// sneaker aura (cyan ring while super sneakers are active)
+const sneakerRing = new THREE.Mesh(
+  new THREE.RingGeometry(0.7, 0.84, 28),
+  new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })
+);
+sneakerRing.rotation.x = -Math.PI / 2;
+sneakerRing.position.y = 0.04;
+sneakerRing.visible = false;
+player.add(sneakerRing);
+
+// hoverboard under the player's feet while the shield is up
+const hoverboard = new THREE.Group();
+const hbDeck = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.08, 1.35), matBoard);
+hoverboard.add(hbDeck);
+const hbGlow = new THREE.Mesh(
+  new THREE.PlaneGeometry(1.2, 1.7),
+  new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+hbGlow.rotation.x = -Math.PI / 2;
+hbGlow.position.y = -0.08;
+hoverboard.add(hbGlow);
+hoverboard.position.y = 0.06;
+hoverboard.visible = false;
+player.add(hoverboard);
+
+// jetpack on the player's back while flying
+const jetRig = new THREE.Group();
+const jetFlames = [];
+for (const sx of [-0.2, 0.2]) {
+  const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.6, 12), matJetMetal);
+  tank.position.set(sx, 0.75, 0.42);
+  jetRig.add(tank);
+  const flame = new THREE.Mesh(
+    new THREE.ConeGeometry(0.11, 0.5, 10),
+    new THREE.MeshBasicMaterial({ color: 0xffb454, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })
+  );
+  flame.rotation.x = Math.PI;
+  flame.position.set(sx, 0.25, 0.42);
+  jetRig.add(flame);
+  jetFlames.push(flame);
+}
+jetRig.visible = false;
+player.add(jetRig);
+
 scene.add(player);
+
+// ---------------------------------------------------------------------------
+// The guard (and his dog): chases into view after a stumble; a second slip
+// while he's on your tail ends the run.
+// ---------------------------------------------------------------------------
+const guardGroup = new THREE.Group();
+const matGuardSuit = new THREE.MeshStandardMaterial({ color: 0x2a3550, roughness: 0.6 });
+const matGuardSkin = new THREE.MeshStandardMaterial({ color: 0xd9a06b, roughness: 0.6 });
+const matGuardCap = new THREE.MeshStandardMaterial({ color: 0x1c2438, roughness: 0.5 });
+{
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.5, 0.26), matGuardSuit);
+  torso.position.y = 1.05;
+  guardGroup.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), matGuardSkin);
+  head.position.y = 1.48;
+  guardGroup.add(head);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.16, 0.09, 14), matGuardCap);
+  cap.position.y = 1.6;
+  guardGroup.add(cap);
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.03, 0.16), matGuardCap);
+  brim.position.set(0, 1.56, -0.14);
+  guardGroup.add(brim);
+}
+const guardArms = [], guardLegs = [];
+for (const side of [-1, 1]) {
+  const arm = new THREE.Group();
+  arm.position.set(side * 0.27, 1.26, 0);
+  const armMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.5, 10), matGuardSuit);
+  armMesh.position.y = -0.25;
+  arm.add(armMesh);
+  guardGroup.add(arm);
+  guardArms.push(arm);
+  const leg = new THREE.Group();
+  leg.position.set(side * 0.12, 0.8, 0);
+  const legMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.78, 10), matGuardSuit);
+  legMesh.position.y = -0.39;
+  leg.add(legMesh);
+  guardGroup.add(leg);
+  guardLegs.push(leg);
+}
+// the dog
+const dogGroup = new THREE.Group();
+{
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.44), matGuardCap);
+  body.position.y = 0.32;
+  dogGroup.add(body);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.2), matGuardCap);
+  head.position.set(0, 0.44, -0.28);
+  dogGroup.add(head);
+  for (const [lx, lz] of [[-0.07, 0.16], [0.07, 0.16], [-0.07, -0.16], [0.07, -0.16]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.24, 6), matGuardCap);
+    leg.position.set(lx, 0.12, lz);
+    dogGroup.add(leg);
+  }
+  dogGroup.position.set(0.62, 0, 0.3);
+}
+guardGroup.add(dogGroup);
+guardGroup.visible = false;
+scene.add(guardGroup);
+let guardZ = 7.5; // behind the camera when idle
+let guardT = 0;
+
+function updateGuard(dt) {
+  const chasing = stumbleTimer > 0 && gameState === 'playing';
+  const targetZ = chasing ? 2.7 : 7.5;
+  guardZ += (targetZ - guardZ) * Math.min(1, dt * 3);
+  guardGroup.visible = guardZ < 7;
+  if (!guardGroup.visible) return;
+  guardT += dt * (5 + speed * 0.4);
+  const sw = Math.sin(guardT);
+  guardArms[0].rotation.x = sw * 0.8;
+  guardArms[1].rotation.x = -sw * 0.8;
+  guardLegs[0].rotation.x = -sw * 0.9;
+  guardLegs[1].rotation.x = sw * 0.9;
+  dogGroup.position.y = Math.abs(Math.sin(guardT * 1.3)) * 0.12;
+  guardGroup.position.set(
+    guardGroup.position.x + (laneX - guardGroup.position.x) * Math.min(1, dt * 4),
+    Math.abs(Math.sin(guardT)) * 0.05,
+    guardZ
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Debris pool (crash burst)
@@ -830,7 +971,9 @@ function deactivateAllCoins() {
 }
 
 // ---------------------------------------------------------------------------
-// Magnet pickups
+// Powerup pickups: magnet, mystery box, 2x booster, super sneakers,
+// hoverboard, jetpack. One pooled holder per slot carries all six mini
+// models; only the spawned type's model is shown.
 // ---------------------------------------------------------------------------
 function buildMagnet() {
   const g = new THREE.Group();
@@ -846,22 +989,104 @@ function buildMagnet() {
   return g;
 }
 
-const magnetPickups = [];
-for (let i = 0; i < 2; i++) {
-  const mesh = buildMagnet();
-  mesh.visible = false;
-  scene.add(mesh);
-  magnetPickups.push({ mesh, active: false, lane: 1, z: SPAWN_Z });
+function buildMysteryBox() {
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), matBoxGold);
+  g.add(box);
+  const r1 = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.14), matBoxRibbon);
+  g.add(r1);
+  const r2 = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.6, 0.6), matBoxRibbon);
+  g.add(r2);
+  return g;
 }
 
-function spawnMagnetPickup(lane, z = SPAWN_Z) {
-  const m = magnetPickups.find((m) => !m.active) || magnetPickups[0];
-  m.active = true;
-  m.lane = lane;
-  m.z = z;
-  m.mesh.visible = true;
-  m.mesh.position.set(LANES[lane], 0.75, z);
-  return m;
+function buildJetpackPickup() {
+  const g = new THREE.Group();
+  for (const sx of [-0.16, 0.16]) {
+    const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.55, 12), matJetMetal);
+    tank.position.set(sx, 0.05, 0);
+    g.add(tank);
+    const nozzle = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.18, 10), matJetNozzle);
+    nozzle.rotation.x = Math.PI;
+    nozzle.position.set(sx, -0.32, 0);
+    g.add(nozzle);
+  }
+  return g;
+}
+
+function buildSneakersPickup() {
+  const g = new THREE.Group();
+  for (const sx of [-0.17, 0.17]) {
+    const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.5), matSneaker);
+    shoe.position.set(sx, 0.05, 0);
+    g.add(shoe);
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.52), matSole);
+    sole.position.set(sx, -0.08, 0);
+    g.add(sole);
+  }
+  return g;
+}
+
+function buildBoosterPickup() {
+  const g = new THREE.Group();
+  const star = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), matBooster);
+  g.add(star);
+  return g;
+}
+
+function buildBoardPickup() {
+  const g = new THREE.Group();
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.95), matBoard);
+  g.add(deck);
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.12, 0.6), matWheel);
+  core.position.y = -0.08;
+  g.add(core);
+  return g;
+}
+
+const PICKUP_BUILDERS = {
+  magnet: buildMagnet, box: buildMysteryBox, x2: buildBoosterPickup,
+  sneakers: buildSneakersPickup, board: buildBoardPickup, jetpack: buildJetpackPickup,
+};
+const pickups = [];
+for (let i = 0; i < 4; i++) {
+  const holder = new THREE.Group();
+  const models = {};
+  for (const [type, build] of Object.entries(PICKUP_BUILDERS)) {
+    const m = build();
+    m.visible = false;
+    holder.add(m);
+    models[type] = m;
+  }
+  holder.visible = false;
+  scene.add(holder);
+  pickups.push({ holder, models, active: false, type: 'magnet', lane: 1, z: SPAWN_Z });
+}
+
+function spawnPickup(type, lane, z = SPAWN_Z) {
+  const p = pickups.find((p) => !p.active) || pickups[0];
+  p.active = true;
+  p.type = type;
+  p.lane = lane;
+  p.z = z;
+  for (const [t, m] of Object.entries(p.models)) m.visible = t === type;
+  p.holder.visible = true;
+  p.holder.position.set(LANES[lane], 0.75, z);
+  return p;
+}
+
+function deactivateAllPickups() {
+  for (const p of pickups) { p.active = false; p.holder.visible = false; }
+}
+
+function pickPickupType() {
+  const r = Math.random();
+  if (r < 0.25) return 'magnet';
+  if (r < 0.45) return 'box';
+  if (r < 0.6) return 'x2';
+  if (r < 0.75) return 'sneakers';
+  if (r < 0.9) return 'board';
+  return 'jetpack';
 }
 
 // ---------------------------------------------------------------------------
@@ -1053,13 +1278,13 @@ function waveGap(speed) {
 // Spawn scheduling
 // ---------------------------------------------------------------------------
 let difficultyT = 0;
-let magnetCountdown = MAGNET_CADENCE * 0.6;
+let pickupCountdown = PICKUP_CADENCE * 0.6;
 let waveCountdown = 2.2; // seconds until the first wave, in real time
-// distance value after which each lane is free again (trains are long, so a
-// lane with a train in it must not receive new spawns until it has scrolled by)
+// world-distance value after which each lane is free again (trains are long,
+// so a lane with a train must not receive new spawns until it scrolls by)
 const laneClearDist = [0, 0, 0];
 
-function laneBusy(i) { return distance < laneClearDist[i]; }
+function laneBusy(i) { return worldDist < laneClearDist[i]; }
 
 function laneHasActiveObstacles(lane) {
   for (const type of Object.keys(obstaclePools)) {
@@ -1138,7 +1363,7 @@ function spawnTrainSection(difficulty) {
         sectionLen += follow.length + 4.5;
       }
     }
-    laneClearDist[lane] = distance + sectionLen + 22;
+    laneClearDist[lane] = worldDist + sectionLen + 22;
     spawned++;
   }
   // ground coins in a free lane as a breadcrumb toward safety
@@ -1178,11 +1403,11 @@ function updateSpawning(dt, speed) {
     waveCountdown = (waveGap(speed) / Math.max(1, speed)) * (trainSection ? 1.7 : 1);
   }
 
-  magnetCountdown -= dt;
-  if (magnetCountdown <= 0) {
-    magnetCountdown = MAGNET_CADENCE;
+  pickupCountdown -= dt;
+  if (pickupCountdown <= 0) {
+    pickupCountdown = PICKUP_CADENCE;
     const freeLanes = [0, 1, 2].filter((i) => !laneBusy(i));
-    if (freeLanes.length > 0) spawnMagnetPickup(pick(freeLanes), SPAWN_Z - 4);
+    if (freeLanes.length > 0) spawnPickup(pickPickupType(), pick(freeLanes), SPAWN_Z - 4);
   }
 }
 
@@ -1207,12 +1432,120 @@ let queuedAt = 0;
 
 let playT = 0;
 let speed = BASE_SPEED;
-let distance = 0;
+let distance = 0;        // score meters (multipliers apply)
+let worldDist = 0;       // true world units traveled (spawn bookkeeping)
 let miles = 0;
 let milesThisRun = 0;
 
 let magnetActive = false;
 let magnetTimer = 0;
+let jetpackTimer = 0;
+let sneakersTimer = 0;
+let multTimer = 0;
+let shieldTimer = 0;
+let stumbleTimer = 0;    // guard chase window after a stumble
+let graceTimer = 0;      // brief invulnerability (shield break / revive / jetpack landing)
+let roofLatch = false;   // for counting distinct roof rides
+let jumpH = JUMP_HEIGHT;
+
+let keys = parseInt(localStorage.getItem(KEYS_KEY) || '0', 10) || 0;
+function saveKeys() { localStorage.setItem(KEYS_KEY, String(keys)); }
+
+// per-run mission counters
+let runCoins = 0, runNearMisses = 0, runJumps = 0, runSlides = 0, runRoofs = 0;
+
+// ---------------------------------------------------------------------------
+// Daily missions: 3 per day, seeded by the date; each completed mission adds
+// +1 to the base score multiplier for the rest of the day (SS-style).
+// ---------------------------------------------------------------------------
+const MISSION_POOL = [
+  { id: 'coins50', label: 'Collect 50 coins', target: 50, get: () => runCoins },
+  { id: 'near10', label: '10 near-misses', target: 10, get: () => runNearMisses },
+  { id: 'roof3', label: 'Ride 3 train roofs', target: 3, get: () => runRoofs },
+  { id: 'jump40', label: 'Jump 40 times', target: 40, get: () => runJumps },
+  { id: 'slide25', label: 'Slide 25 times', target: 25, get: () => runSlides },
+  { id: 'dist800', label: 'Run 800m', target: 800, get: () => Math.floor(worldDist) },
+];
+
+function missionDateKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+const MISSIONS_LS_KEY = 'am.runway.missions.' + missionDateKey();
+let missionsCompleted = [];
+try { missionsCompleted = JSON.parse(localStorage.getItem(MISSIONS_LS_KEY) || '[]'); } catch { /* fresh */ }
+
+const todaysMissions = (() => {
+  const dk = missionDateKey();
+  let seed = 0;
+  for (const ch of dk) seed = ((seed * 31) + ch.charCodeAt(0)) | 0;
+  const rng = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const pool = [...MISSION_POOL];
+  const chosen = [];
+  for (let i = 0; i < 3; i++) chosen.push(pool.splice((rng() * pool.length) | 0, 1)[0]);
+  return chosen;
+})();
+
+function totalMult() {
+  return (1 + missionsCompleted.length) * (multTimer > 0 ? 2 : 1);
+}
+
+function checkMissions() {
+  for (const m of todaysMissions) {
+    if (missionsCompleted.includes(m.id)) continue;
+    if (m.get() >= m.target) {
+      missionsCompleted.push(m.id);
+      localStorage.setItem(MISSIONS_LS_KEY, JSON.stringify(missionsCompleted));
+      showToast(`Mission done: ${m.label} — score x${1 + missionsCompleted.length}`);
+      renderMissions();
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Powerup activation
+// ---------------------------------------------------------------------------
+function activateMagnet() { magnetActive = true; magnetTimer = MAGNET_DURATION; showToast('Coin magnet!'); }
+function activate2x() { multTimer = MULT_DURATION; showToast('2x score!'); }
+function activateSneakers() { sneakersTimer = SNEAKERS_DURATION; showToast('Super sneakers!'); }
+function activateShield() { shieldTimer = SHIELD_DURATION; showToast('Hoverboard!'); }
+
+function activateJetpack() {
+  jetpackTimer = JETPACK_DURATION;
+  showToast('Jetpack!');
+  // high coin trails to vacuum up while flying
+  for (let lane = 0; lane < 3; lane++) {
+    if (lane !== laneIndex && Math.random() < 0.4) continue;
+    for (let k = 0; k < 26; k++) spawnCoinAt(LANES[lane], JET_HEIGHT + 0.4, -8 - k * 2.6);
+  }
+}
+
+function grantMysteryReward() {
+  const r = Math.random();
+  if (r < 0.1) { keys++; saveKeys(); showToast('Found a key!'); }
+  else if (r < 0.28) {
+    miles += 15; milesThisRun += 15; runCoins += 15;
+    milesEl.textContent = miles;
+    showToast('+15 coins!');
+  }
+  else if (r < 0.46) activateMagnet();
+  else if (r < 0.62) activate2x();
+  else if (r < 0.78) activateSneakers();
+  else if (r < 0.92) activateShield();
+  else activateJetpack();
+}
+
+function applyPickup(type) {
+  if (type === 'magnet') activateMagnet();
+  else if (type === 'box') grantMysteryReward();
+  else if (type === 'x2') activate2x();
+  else if (type === 'sneakers') activateSneakers();
+  else if (type === 'board') activateShield();
+  else if (type === 'jetpack') activateJetpack();
+}
 
 let timeSlowTimer = 0;
 let crashT = 0;
@@ -1237,8 +1570,82 @@ const finalMilesEl = document.getElementById('final-miles');
 const bestScoreEl = document.getElementById('best-score');
 const newBestEl = document.getElementById('new-best');
 const restartBtn = document.getElementById('restart');
+const x2Pip = document.getElementById('x2-pip');
+const x2TimeEl = document.getElementById('x2-time');
+const sneakersPip = document.getElementById('sneakers-pip');
+const sneakersTimeEl = document.getElementById('sneakers-time');
+const shieldPip = document.getElementById('shield-pip');
+const shieldTimeEl = document.getElementById('shield-time');
+const jetPip = document.getElementById('jet-pip');
+const jetTimeEl = document.getElementById('jet-time');
+const multBadge = document.getElementById('mult-badge');
+const toastEl = document.getElementById('toast');
+const missionsEl = document.getElementById('missions');
+const reviveBtn = document.getElementById('revive');
+const keyCountEl = document.getElementById('key-count');
 
 bestScoreEl.textContent = best;
+
+function setPip(el, timeEl, t) {
+  el.hidden = t <= 0;
+  if (t > 0) timeEl.textContent = Math.ceil(t);
+}
+
+function updatePips() {
+  magnetPip.hidden = !magnetActive;
+  if (magnetActive) magnetTimeEl.textContent = Math.ceil(magnetTimer);
+  setPip(x2Pip, x2TimeEl, multTimer);
+  setPip(sneakersPip, sneakersTimeEl, sneakersTimer);
+  setPip(shieldPip, shieldTimeEl, shieldTimer);
+  setPip(jetPip, jetTimeEl, jetpackTimer);
+  const m = totalMult();
+  multBadge.hidden = m <= 1;
+  if (m > 1) multBadge.textContent = 'x' + m;
+}
+
+let toastTimeout = null;
+function showToast(text) {
+  toastEl.textContent = text;
+  toastEl.hidden = false;
+  toastEl.classList.remove('show');
+  void toastEl.offsetWidth; // restart the CSS transition
+  toastEl.classList.add('show');
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { toastEl.classList.remove('show'); toastEl.hidden = true; }, 1900);
+}
+
+function renderMissions() {
+  const rows = todaysMissions.map((m) => {
+    const done = missionsCompleted.includes(m.id);
+    const cur = Math.min(m.get(), m.target);
+    return `<div class="mission${done ? ' done' : ''}"><span class="mission-check">${done ? '&#10003;' : '&#9675;'}</span><span class="mission-label">${m.label}</span><em>${done ? '' : `${cur}/${m.target}`}</em></div>`;
+  }).join('');
+  missionsEl.innerHTML = `<p class="missions-title">Daily missions &middot; score x${1 + missionsCompleted.length}</p>${rows}`;
+}
+renderMissions();
+
+function updateReviveBtn() {
+  reviveBtn.hidden = keys < 1;
+  keyCountEl.textContent = keys;
+}
+
+// SS keys: spend one to keep the run going after a crash
+function revive() {
+  if (keys < 1 || gameState !== 'over') return;
+  keys--;
+  saveKeys();
+  clearHazardsNearPlayer(true);
+  overOverlay.hidden = true;
+  hud.classList.remove('dim');
+  player.visible = true;
+  player.rotation.set(0, 0, 0);
+  actionState = 'run'; actionT = 0; airY = 0; playerElev = 0; elevVel = 0;
+  stumbleTimer = 0;
+  graceTimer = 2;
+  gameState = 'playing';
+  updateReviveBtn();
+  showToast('Revived!');
+}
 
 function setDistanceHud(v) {
   distanceEl.firstChild.textContent = String(Math.floor(v));
@@ -1264,18 +1671,22 @@ function consumeQueue() {
   }
 }
 
-function startJump() { actionState = 'jump'; actionT = 0; }
-function startSlide() { actionState = 'slide'; actionT = 0; }
+function startJump() {
+  actionState = 'jump'; actionT = 0;
+  jumpH = sneakersTimer > 0 ? SNEAKERS_JUMP : JUMP_HEIGHT;
+  runJumps++;
+}
+function startSlide() { actionState = 'slide'; actionT = 0; runSlides++; }
 function startSlam() { actionState = 'slam'; actionT = 0; slamStartY = airY; }
 
 function tryJump() {
-  if (gameState !== 'playing') return;
+  if (gameState !== 'playing' || jetpackTimer > 0) return;
   if (actionState === 'run') startJump();
   else if (actionState === 'slide') queueAction('jump');
 }
 
 function trySlide() {
-  if (gameState !== 'playing') return;
+  if (gameState !== 'playing' || jetpackTimer > 0) return;
   if (actionState === 'run') startSlide();
   else if (actionState === 'jump') startSlam();
   else if (actionState === 'slam') { /* already slamming */ }
@@ -1293,7 +1704,7 @@ function updateAction(dt) {
   actionT += dt;
   if (actionState === 'jump') {
     const t = Math.min(actionT / JUMP_DURATION, 1);
-    airY = 4 * JUMP_HEIGHT * t * (1 - t);
+    airY = 4 * jumpH * t * (1 - t);
     if (t >= 1) { actionState = 'run'; actionT = 0; airY = 0; consumeQueue(); }
   } else if (actionState === 'slam') {
     const t = Math.min(actionT / SLAM_DURATION, 1);
@@ -1315,6 +1726,16 @@ function landFromAir() {
 // Reconcile the player's height with whatever is underneath: climb ramps,
 // land on roofs (or smack into a train face), fall off the end of a train.
 function updateVertical(dt) {
+  if (jetpackTimer > 0) {
+    // cruise above everything; trains and obstacles pass harmlessly below
+    airY = 0;
+    if (actionState !== 'run') { actionState = 'run'; actionT = 0; }
+    playerElev += (JET_HEIGHT - playerElev) * Math.min(1, dt * 3);
+    elevVel = 0;
+    roofLatch = false;
+    playerY = playerElev;
+    return;
+  }
   const s = computeSupport();
   const abs = playerElev + airY;
   if (isAirborne()) {
@@ -1340,6 +1761,9 @@ function updateVertical(dt) {
     }
   }
   playerY = playerElev + airY;
+  // count distinct roof rides for missions
+  if (playerElev >= 1.4 && !roofLatch) { roofLatch = true; runRoofs++; }
+  else if (playerElev < 0.5) roofLatch = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -1357,14 +1781,41 @@ function resolveObstacle(o) {
     if (isSliding()) return true;
     return false;
   }
-  // tanker: reaching here means x-proximity already matched -> always fatal
-  return false;
+  // tanker: normally fatal, but a super-sneakers jump sails clean over it
+  return isAirborne() && airY > 1.7;
 }
 
 function nearMiss() {
-  distance += 5; // small bonus, folded into the distance/score readout
+  distance += 5 * totalMult(); // small bonus, folded into the score readout
+  runNearMisses++;
   timeSlowTimer = 0.12;
   navigator.vibrate?.(6);
+}
+
+// Clipping the edge of an obstacle: not fatal, but the guard starts chasing.
+// Slip again while he's behind you and he catches you.
+function stumble() {
+  if (jetpackTimer > 0 || graceTimer > 0) return;
+  if (stumbleTimer > 0) { crash(); return; }
+  stumbleTimer = STUMBLE_WINDOW;
+  camShakeAmt = 0.25;
+  navigator.vibrate?.(15);
+  showToast('Stumbled — guard incoming!');
+}
+
+// After a shield save or a revive, sweep the danger out of the player's path
+// so they aren't instantly re-killed by the thing they just hit.
+function clearHazardsNearPlayer(allLanes = false) {
+  for (const type of Object.keys(obstaclePools)) {
+    for (const o of obstaclePools[type]) {
+      if (!o.active) continue;
+      if ((allLanes || o.lane === laneIndex) && o.z > -16) { o.active = false; o.mesh.visible = false; }
+    }
+  }
+  for (const tr of trains) {
+    if (!tr.active) continue;
+    if ((allLanes || tr.lane === laneIndex) && tr.z > -20) { tr.active = false; tr.group.visible = false; }
+  }
 }
 
 function collectCoin(c) {
@@ -1372,16 +1823,9 @@ function collectCoin(c) {
   c.mesh.visible = false;
   miles++;
   milesThisRun++;
+  runCoins++;
   milesEl.textContent = miles;
   if (milesThisRun > 0 && milesThisRun % 10 === 0) navigator.vibrate?.(10);
-}
-
-function collectMagnet(m) {
-  m.active = false;
-  m.mesh.visible = false;
-  magnetActive = true;
-  magnetTimer = MAGNET_DURATION;
-  navigator.vibrate?.(10);
 }
 
 function updateCollisions(dt) {
@@ -1398,6 +1842,9 @@ function updateCollisions(dt) {
         if (dx < COLLIDE_X) {
           o.passed = true;
           if (!resolveObstacle(o)) { crash(); return; }
+        } else if (dx < COLLIDE_X + 0.28) {
+          o.passed = true;
+          stumble(); // clipped the corner mid-lane-change
         } else if (dx < NEARMISS_X) {
           o.passed = true;
           nearMiss();
@@ -1418,7 +1865,7 @@ function updateCollisions(dt) {
         const pull = Math.min(1, dt * 9);
         c.x += dxp * pull;
         c.z += dzp * pull;
-        c.y += (0.55 - c.y) * pull;
+        c.y += (playerY + 0.55 - c.y) * pull;
         pulled = true;
       }
     }
@@ -1432,14 +1879,20 @@ function updateCollisions(dt) {
     if (Math.abs(c.z) < 0.75 && dx < 0.75 && Math.abs(playerY + 0.55 - c.y) < 1.0) collectCoin(c);
   }
 
-  for (const m of magnetPickups) {
-    if (!m.active) continue;
-    m.z += speed * dt;
-    m.mesh.position.z = m.z;
-    m.mesh.rotation.y += 3 * dt;
-    if (m.z > DESPAWN_Z) { m.active = false; m.mesh.visible = false; continue; }
-    const dx = Math.abs(laneX - LANES[m.lane]);
-    if (Math.abs(m.z) < 0.65 && dx < 0.85) collectMagnet(m);
+  for (const p of pickups) {
+    if (!p.active) continue;
+    p.z += speed * dt;
+    p.holder.position.z = p.z;
+    p.holder.rotation.y += 3 * dt;
+    if (p.z > DESPAWN_Z) { p.active = false; p.holder.visible = false; continue; }
+    if (playerElev > 1.0) continue; // pickups sit at ground level
+    const dx = Math.abs(laneX - LANES[p.lane]);
+    if (Math.abs(p.z) < 0.65 && dx < 0.85) {
+      p.active = false;
+      p.holder.visible = false;
+      navigator.vibrate?.(10);
+      applyPickup(p.type);
+    }
   }
 }
 
@@ -1448,6 +1901,17 @@ function updateCollisions(dt) {
 // ---------------------------------------------------------------------------
 function crash() {
   if (gameState !== 'playing') return;
+  if (jetpackTimer > 0 || graceTimer > 0) return; // untouchable
+  if (shieldTimer > 0) {
+    // hoverboard takes the hit
+    shieldTimer = 0;
+    graceTimer = 1.4;
+    clearHazardsNearPlayer();
+    camShakeAmt = 0.35;
+    navigator.vibrate?.(20);
+    showToast('Hoverboard smashed!');
+    return;
+  }
   gameState = 'crashing';
   crashT = 0;
   navigator.vibrate?.(30);
@@ -1464,6 +1928,7 @@ function finishCrash() {
   finalDistanceEl.textContent = Math.floor(distance);
   finalMilesEl.textContent = miles;
   newBestEl.hidden = !isNew;
+  updateReviveBtn();
   overOverlay.hidden = false;
 }
 
@@ -1471,7 +1936,7 @@ function resetWorld() {
   deactivateAllObstacles();
   deactivateAllCoins();
   deactivateAllTrains();
-  for (const m of magnetPickups) { m.active = false; m.mesh.visible = false; }
+  deactivateAllPickups();
   laneClearDist[0] = laneClearDist[1] = laneClearDist[2] = 0;
   laneIndex = 1;
   laneX = 0;
@@ -1488,15 +1953,27 @@ function resetWorld() {
   playT = 0;
   speed = BASE_SPEED;
   distance = 0;
+  worldDist = 0;
   miles = 0;
   milesThisRun = 0;
   magnetActive = false;
   magnetTimer = 0;
+  jetpackTimer = 0;
+  sneakersTimer = 0;
+  multTimer = 0;
+  shieldTimer = 0;
+  stumbleTimer = 0;
+  graceTimer = 0;
+  roofLatch = false;
+  jumpH = JUMP_HEIGHT;
+  runCoins = 0; runNearMisses = 0; runJumps = 0; runSlides = 0; runRoofs = 0;
+  guardZ = 7.5;
+  guardGroup.visible = false;
   timeSlowTimer = 0;
   crashT = 0;
   waveCountdown = 2.2;
   difficultyT = 0;
-  magnetCountdown = MAGNET_CADENCE * 0.6;
+  pickupCountdown = PICKUP_CADENCE * 0.6;
   milesEl.textContent = '0';
   setDistanceHud(0);
   player.rotation.set(0, 0, 0);
@@ -1506,6 +1983,8 @@ function resetWorld() {
 
 function startGame() {
   resetWorld();
+  renderMissions();
+  updatePips();
   gameState = 'playing';
   startOverlay.hidden = true;
   overOverlay.hidden = true;
@@ -1558,10 +2037,11 @@ pickerEl.addEventListener('click', (e) => {
 });
 syncPicker();
 overOverlay.addEventListener('pointerup', (e) => {
-  if (e.target.closest('#restart')) return; // handled by its own click
+  if (e.target.closest('#restart') || e.target.closest('#revive')) return; // handled by their own clicks
   handleTapRestart();
 });
 restartBtn.addEventListener('click', handleTapRestart);
+reviveBtn.addEventListener('click', (e) => { e.stopPropagation(); revive(); });
 
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
@@ -1605,6 +2085,16 @@ function updatePlayerVisual(dt) {
     magnetRing.scale.setScalar(pulse);
     magnetRing.material.opacity = 0.35 + 0.2 * Math.sin(performance.now() * 0.012);
   }
+
+  sneakerRing.visible = sneakersTimer > 0;
+  hoverboard.visible = shieldTimer > 0;
+  jetRig.visible = jetpackTimer > 0;
+  if (jetpackTimer > 0) {
+    for (const f of jetFlames) f.scale.set(1, 0.7 + Math.random() * 0.5, 1);
+  }
+  // flicker while briefly invulnerable so the save reads clearly
+  const flicker = graceTimer > 0 && (performance.now() / 90 | 0) % 2 === 0;
+  activeChar.root.visible = !flicker;
 }
 
 function updateEnvironment(dt, envSpeed) {
@@ -1669,7 +2159,8 @@ function tick(now) {
     playT += sdt;
     speed = MAX_SPEED - (MAX_SPEED - BASE_SPEED) * Math.exp(-playT / SPEED_TAU);
     envSpeed = speed;
-    distance += speed * sdt;
+    worldDist += speed * sdt;
+    distance += speed * sdt * totalMult();
 
     updateAction(sdt);
     updateTrains(sdt);
@@ -1677,14 +2168,23 @@ function tick(now) {
     updateSpawning(sdt, speed);
     updateCollisions(sdt);
 
+    // powerup / status timers
     if (magnetActive) {
       magnetTimer -= sdt;
       if (magnetTimer <= 0) { magnetActive = false; magnetTimer = 0; }
-      magnetPip.hidden = false;
-      magnetTimeEl.textContent = Math.ceil(magnetTimer);
-    } else {
-      magnetPip.hidden = true;
     }
+    if (jetpackTimer > 0) {
+      jetpackTimer -= sdt;
+      if (jetpackTimer <= 0) { jetpackTimer = 0; graceTimer = Math.max(graceTimer, 1.0); }
+    }
+    if (sneakersTimer > 0) sneakersTimer = Math.max(0, sneakersTimer - sdt);
+    if (multTimer > 0) multTimer = Math.max(0, multTimer - sdt);
+    if (shieldTimer > 0) shieldTimer = Math.max(0, shieldTimer - sdt);
+    if (stumbleTimer > 0) stumbleTimer = Math.max(0, stumbleTimer - sdt);
+    if (graceTimer > 0) graceTimer = Math.max(0, graceTimer - sdt);
+
+    updatePips();
+    checkMissions();
 
     const df = Math.floor(distance);
     if (df !== lastDistanceShown) { setDistanceHud(distance); lastDistanceShown = df; if (df % 25 === 0 && df > 0) popDistance(); }
@@ -1704,6 +2204,7 @@ function tick(now) {
   }
 
   updateEnvironment(dt, envSpeed);
+  updateGuard(dt);
   updatePlayerVisual(dt);
   updateCamera(dt);
 
@@ -1766,6 +2267,9 @@ window.__test = {
       gameState, distance: Math.floor(distance), miles, speed,
       laneIndex, laneX, playerY, actionState, magnetActive, magnetTimer, best,
       runner: runnerId, elevation: playerElev, support: computeSupport(),
+      jetpackTimer, sneakersTimer, multTimer, shieldTimer, stumbleTimer, graceTimer,
+      keys, mult: totalMult(), worldDist: Math.floor(worldDist),
+      missions: { completed: [...missionsCompleted], counters: { runCoins, runNearMisses, runJumps, runSlides, runRoofs } },
     };
   },
   setRunner(id) { selectRunner(id); syncPicker(); },
@@ -1783,7 +2287,12 @@ window.__test = {
   forceSpawn(type, lane = laneIndex, z = -1.2) { return spawnObstacle(type, lane, z); },
   forceTrain(type, lane = laneIndex, z = -10) { return spawnTrain(type, lane, z); },
   clearTrains() { deactivateAllTrains(); },
-  forceMagnet(lane = laneIndex, z = -1.2) { return spawnMagnetPickup(lane, z); },
+  forceMagnet(lane = laneIndex, z = -1.2) { return spawnPickup('magnet', lane, z); },
+  forcePickup(type, lane = laneIndex, z = -1.2) { return spawnPickup(type, lane, z); },
+  activate(type) { applyPickup(type); },
+  setKeys(n) { keys = n; saveKeys(); updateReviveBtn(); },
+  revive() { revive(); },
+  stumbleNow() { stumble(); },
   forceCoin(lane = laneIndex, z = -1.2) { return spawnCoinAt(LANES[lane], 0.5, z); },
   clearObstacles() { deactivateAllObstacles(); },
   generateWave(difficulty) { return generateWave(difficulty); },

@@ -28,16 +28,24 @@
 
     <!-- In-play HUD -->
     <div class="hud" id="hud">
-      <div class="distance" id="distance" aria-live="polite">0<span class="unit">m</span></div>
-      <div class="miles-chip" id="miles-chip">
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 8L2 15l10 5 10-5-10-5Z" fill="currentColor"/></svg>
-        <span id="miles">0</span>
-      </div>
-      <div class="magnet-pip" id="magnet-pip" hidden>
-        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3H6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        <span id="magnet-time">6</span>
+      <div class="distance" id="distance" aria-live="polite">0<span class="unit">m</span><span class="mult-badge" id="mult-badge" hidden>x2</span></div>
+      <div class="pip-stack">
+        <div class="miles-chip" id="miles-chip">
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 8L2 15l10 5 10-5-10-5Z" fill="currentColor"/></svg>
+          <span id="miles">0</span>
+        </div>
+        <div class="pip magnet-pip" id="magnet-pip" hidden>
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 3v8a6 6 0 0 0 12 0V3h-4v8a2 2 0 0 1-4 0V3H6Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span id="magnet-time">6</span>
+        </div>
+        <div class="pip pip-x2" id="x2-pip" hidden>2x&nbsp;<span id="x2-time"></span></div>
+        <div class="pip pip-sneakers" id="sneakers-pip" hidden>JUMP&nbsp;<span id="sneakers-time"></span></div>
+        <div class="pip pip-shield" id="shield-pip" hidden>BOARD&nbsp;<span id="shield-time"></span></div>
+        <div class="pip pip-jet" id="jet-pip" hidden>JET&nbsp;<span id="jet-time"></span></div>
       </div>
     </div>
+
+    <div class="toast" id="toast" hidden></div>
 
     <!-- Start overlay -->
     <div class="overlay" id="start-overlay">
@@ -50,6 +58,7 @@
           <button class="picker-btn" type="button" data-runner="optimus"><span class="picker-icon">🤖</span><span class="picker-name">Optimus</span></button>
           <button class="picker-btn" type="button" data-runner="tron"><span class="picker-icon">💠</span><span class="picker-name">Tron</span></button>
         </div>
+        <div class="missions" id="missions"></div>
         <div class="cta"><span class="if-touch">tap to start</span><span class="if-key">press Space to start</span></div>
         <button class="install-btn" id="install" type="button" hidden>
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -77,6 +86,7 @@
           </div>
         </div>
         <p class="new-best" id="new-best" hidden>New best</p>
+        <button class="btn btn-revive" id="revive" type="button" hidden>Revive &middot; 🔑<span id="key-count">0</span></button>
         <button class="btn btn-primary" id="restart" type="button">Run again</button>
         <p class="restart-hint"><span class="if-touch">or tap anywhere</span><span class="if-key">Space or R to restart</span></p>
       </div>
