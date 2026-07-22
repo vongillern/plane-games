@@ -27,8 +27,10 @@ itself. Everything else — ball, bricks, power-ups — plays out above it.
   completion.
 - Power-up capsules glow in their own color with a literal icon (↔ wide,
   clock slow, three dots multi-ball, hammer smash, heart life); catching one
-  flashes the paddle in that color. While hammer is active, armored (two-hit)
-  bricks break in a single hit; metal bricks still refuse.
+  flashes the paddle in that color. The hammer capsule stands out from the
+  rest: a moving rainbow gradient sheds sparkles as it falls. While hammer is
+  active, armored (two-hit) bricks break in a single hit; metal bricks still
+  refuse.
 
 ## Feedback
 - Every brick answers back: white hit-flash, colored particle burst + pop

@@ -235,20 +235,34 @@ function paddleGlowSprite() {
   });
 }
 
-function powerupSprite(type) {
+// The hammer capsule animates: a rainbow gradient slides across it. Frames are
+// pre-rendered into the sprite cache (one small canvas per phase), so drawing
+// stays a plain drawImage like every other sprite.
+const HAMMER_FRAMES = 24;
+
+function powerupSprite(type, frame = 0) {
   const def = PU_TYPES[type];
+  const rainbow = type === 'hammer';
   const PAD = 9, W = PU_W + PAD * 2, H = PU_H + PAD * 2;
-  return makeSprite(`pu|${type}`, W, H, (g) => {
+  return makeSprite(rainbow ? `pu|hammer|${frame}` : `pu|${type}`, W, H, (g) => {
     const x = PAD, y = PAD;
+    const hue0 = (frame / HAMMER_FRAMES) * 360;
     const halo = g.createRadialGradient(W / 2, H / 2, 2, W / 2, H / 2, W / 2);
-    halo.addColorStop(0, hexA(def.color, 0.45));
-    halo.addColorStop(1, hexA(def.color, 0));
+    halo.addColorStop(0, rainbow ? `hsla(${hue0}, 95%, 65%, .45)` : hexA(def.color, 0.45));
+    halo.addColorStop(1, rainbow ? `hsla(${hue0}, 95%, 65%, 0)` : hexA(def.color, 0));
     g.fillStyle = halo;
     g.fillRect(0, 0, W, H);
-    const grad = g.createLinearGradient(0, y, 0, y + PU_H);
-    grad.addColorStop(0, mix(def.color, '#ffffff', 0.4));
-    grad.addColorStop(0.5, def.color);
-    grad.addColorStop(1, mix(def.color, '#000000', 0.3));
+    let grad;
+    if (rainbow) {
+      // full hue wheel across the capsule; advancing the frame slides it left
+      grad = g.createLinearGradient(x, 0, x + PU_W, 0);
+      for (let i = 0; i <= 6; i++) grad.addColorStop(i / 6, `hsl(${(hue0 + i * 60) % 360}, 95%, 62%)`);
+    } else {
+      grad = g.createLinearGradient(0, y, 0, y + PU_H);
+      grad.addColorStop(0, mix(def.color, '#ffffff', 0.4));
+      grad.addColorStop(0.5, def.color);
+      grad.addColorStop(1, mix(def.color, '#000000', 0.3));
+    }
     g.fillStyle = grad;
     roundRectPath(g, x, y, PU_W, PU_H, PU_H / 2);
     g.fill();
@@ -338,6 +352,26 @@ function burst(x, y, color, count, spread = 130) {
     p.color = color;
     p.size = 1.8 + Math.random() * 2.4;
     spawned++;
+  }
+}
+
+// Tiny rainbow glints shed by the falling hammer capsule — same pool as
+// bursts, just gentler velocities and shorter lives.
+function spawnSparkle(x, y) {
+  for (const p of particles) {
+    if (p.active) continue;
+    const a = Math.random() * TAU;
+    const spd = 12 + Math.random() * 32;
+    p.active = true;
+    p.x = x + (Math.random() * 2 - 1) * PU_W * 0.45;
+    p.y = y + (Math.random() * 2 - 1) * PU_H * 0.5;
+    p.vx = Math.cos(a) * spd;
+    p.vy = Math.sin(a) * spd - 22;
+    p.life = 0;
+    p.maxLife = 0.28 + Math.random() * 0.24;
+    p.color = `hsl(${Math.floor(Math.random() * 360)}, 95%, 70%)`;
+    p.size = 0.9 + Math.random() * 1.4;
+    return;
   }
 }
 
@@ -800,7 +834,11 @@ function applyPowerup(type) {
   score += 25;
   paddle.flash = 1;
   navigator.vibrate?.(10);
-  burst(paddle.x, paddle.y - 10, PU_TYPES[type].color, 12, 110);
+  if (type === 'hammer') {
+    for (let i = 0; i < 4; i++) burst(paddle.x, paddle.y - 10, `hsl(${i * 90}, 95%, 65%)`, 4, 110);
+  } else {
+    burst(paddle.x, paddle.y - 10, PU_TYPES[type].color, 12, 110);
+  }
   if (type === 'wide') {
     wideUntil = t + WIDE_S;
     paddle.targetW = PADDLE_WIDE_W;
@@ -829,6 +867,10 @@ function updatePowerups(dt) {
   for (const pu of powerups) {
     if (!pu.alive) continue;
     pu.y += POWERUP_FALL * dt;
+    if (pu.type === 'hammer') {
+      pu.sparkleT = (pu.sparkleT || 0) - dt;
+      if (pu.sparkleT <= 0) { spawnSparkle(pu.x, pu.y); pu.sparkleT = 0.05; }
+    }
     const hw = paddle.w / 2 + 4, hh = paddle.h / 2 + 4;
     if (pu.y + PU_H / 2 > paddle.y - hh && pu.y - PU_H / 2 < paddle.y + hh &&
         pu.x + PU_W / 2 > paddle.x - hw && pu.x - PU_W / 2 < paddle.x + hw) {
@@ -990,8 +1032,9 @@ function drawBalls() {
 }
 
 function drawPowerups() {
+  const hammerFrame = Math.floor(t * 18) % HAMMER_FRAMES;
   for (const pu of powerups) {
-    const spr = powerupSprite(pu.type);
+    const spr = powerupSprite(pu.type, hammerFrame);
     ctx.save();
     ctx.translate(pu.x, pu.y);
     ctx.rotate(Math.sin(t * 3 + pu.phase) * 0.14);
