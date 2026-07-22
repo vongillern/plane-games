@@ -30,7 +30,7 @@ const KEY_PADDLE_SPEED = 560;    // u/s while holding an arrow key
 const SPEED_RAMP = 7;            // u/s gained per second within a level
 const POWERUP_FALL = 150;        // u/s
 const POWERUP_CHANCE = 0.13;
-const WIDE_S = 10, SLOW_S = 8, SLOW_MUL = 0.62;
+const WIDE_S = 10, SLOW_S = 8, SLOW_MUL = 0.62, HAMMER_S = 9;
 const START_LIVES = 3, MAX_LIVES = 5;
 const TRAIL_N = 10;
 const BANNER_S = 1.35;
@@ -44,6 +44,7 @@ const PU_TYPES = {
   wide: { color: '#38bdf8', weight: 0.32 },
   slow: { color: '#a78bfa', weight: 0.26 },
   multi: { color: '#f97316', weight: 0.28 },
+  hammer: { color: '#fbbf24', weight: 0.2 },
   life: { color: '#f43f5e', weight: 0.14 },
 };
 
@@ -234,20 +235,34 @@ function paddleGlowSprite() {
   });
 }
 
-function powerupSprite(type) {
+// The hammer capsule animates: a rainbow gradient slides across it. Frames are
+// pre-rendered into the sprite cache (one small canvas per phase), so drawing
+// stays a plain drawImage like every other sprite.
+const HAMMER_FRAMES = 24;
+
+function powerupSprite(type, frame = 0) {
   const def = PU_TYPES[type];
+  const rainbow = type === 'hammer';
   const PAD = 9, W = PU_W + PAD * 2, H = PU_H + PAD * 2;
-  return makeSprite(`pu|${type}`, W, H, (g) => {
+  return makeSprite(rainbow ? `pu|hammer|${frame}` : `pu|${type}`, W, H, (g) => {
     const x = PAD, y = PAD;
+    const hue0 = (frame / HAMMER_FRAMES) * 360;
     const halo = g.createRadialGradient(W / 2, H / 2, 2, W / 2, H / 2, W / 2);
-    halo.addColorStop(0, hexA(def.color, 0.45));
-    halo.addColorStop(1, hexA(def.color, 0));
+    halo.addColorStop(0, rainbow ? `hsla(${hue0}, 95%, 65%, .45)` : hexA(def.color, 0.45));
+    halo.addColorStop(1, rainbow ? `hsla(${hue0}, 95%, 65%, 0)` : hexA(def.color, 0));
     g.fillStyle = halo;
     g.fillRect(0, 0, W, H);
-    const grad = g.createLinearGradient(0, y, 0, y + PU_H);
-    grad.addColorStop(0, mix(def.color, '#ffffff', 0.4));
-    grad.addColorStop(0.5, def.color);
-    grad.addColorStop(1, mix(def.color, '#000000', 0.3));
+    let grad;
+    if (rainbow) {
+      // full hue wheel across the capsule; advancing the frame slides it left
+      grad = g.createLinearGradient(x, 0, x + PU_W, 0);
+      for (let i = 0; i <= 6; i++) grad.addColorStop(i / 6, `hsl(${(hue0 + i * 60) % 360}, 95%, 62%)`);
+    } else {
+      grad = g.createLinearGradient(0, y, 0, y + PU_H);
+      grad.addColorStop(0, mix(def.color, '#ffffff', 0.4));
+      grad.addColorStop(0.5, def.color);
+      grad.addColorStop(1, mix(def.color, '#000000', 0.3));
+    }
     g.fillStyle = grad;
     roundRectPath(g, x, y, PU_W, PU_H, PU_H / 2);
     g.fill();
@@ -274,6 +289,14 @@ function powerupSprite(type) {
       for (const [dx, dy] of [[-5.5, 1.5], [0, -2.5], [5.5, 1.5]]) {
         g.beginPath(); g.arc(cx + dx, cy + dy, 2.6, 0, TAU); g.fill();
       }
+    } else if (type === 'hammer') {
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(-0.55);
+      roundRectPath(g, -5, -5.5, 10, 4.6, 1.4); // head
+      g.fill();
+      g.beginPath(); g.moveTo(0, -1.2); g.lineTo(0, 6); g.stroke(); // handle
+      g.restore();
     } else if (type === 'life') {
       g.beginPath();
       g.moveTo(cx, cy + 4.6);
@@ -329,6 +352,26 @@ function burst(x, y, color, count, spread = 130) {
     p.color = color;
     p.size = 1.8 + Math.random() * 2.4;
     spawned++;
+  }
+}
+
+// Tiny rainbow glints shed by the falling hammer capsule — same pool as
+// bursts, just gentler velocities and shorter lives.
+function spawnSparkle(x, y) {
+  for (const p of particles) {
+    if (p.active) continue;
+    const a = Math.random() * TAU;
+    const spd = 12 + Math.random() * 32;
+    p.active = true;
+    p.x = x + (Math.random() * 2 - 1) * PU_W * 0.45;
+    p.y = y + (Math.random() * 2 - 1) * PU_H * 0.5;
+    p.vx = Math.cos(a) * spd;
+    p.vy = Math.sin(a) * spd - 22;
+    p.life = 0;
+    p.maxLife = 0.28 + Math.random() * 0.24;
+    p.color = `hsl(${Math.floor(Math.random() * 360)}, 95%, 70%)`;
+    p.size = 0.9 + Math.random() * 1.4;
+    return;
   }
 }
 
@@ -458,7 +501,7 @@ let state = 'ready'; // 'ready' | 'serve' | 'playing' | 'banner' | 'over'
 let paddle, balls, bricks, powerups, breakableLeft;
 let score, lives, level, best;
 let levelBaseSpeed = 350, levelSpeedCap = 480;
-let wideUntil = 0, slowUntil = 0;
+let wideUntil = 0, slowUntil = 0, hammerUntil = 0;
 let shake = 0;
 let bannerUntil = 0;
 let t = 0;
@@ -499,7 +542,7 @@ function newGame() {
   level = 1;
   paddle = makePaddle();
   powerups = [];
-  wideUntil = slowUntil = 0;
+  wideUntil = slowUntil = hammerUntil = 0;
   shake = 0;
   buildLevel(level);
   spawnServeBall();
@@ -549,7 +592,7 @@ function loseBall() {
   shake = 1;
   navigator.vibrate?.(10);
   powerups.length = 0;
-  wideUntil = slowUntil = 0;
+  wideUntil = slowUntil = hammerUntil = 0;
   paddle.targetW = PADDLE_W;
   if (lives <= 0) {
     updateHUD();
@@ -566,7 +609,7 @@ function beginBanner() {
   bannerUntil = t + BANNER_S;
   balls.length = 0;
   powerups.length = 0;
-  wideUntil = slowUntil = 0;
+  wideUntil = slowUntil = hammerUntil = 0;
   paddle.targetW = PADDLE_W;
   navigator.vibrate?.(10);
   showBanner(`LEVEL ${level + 1}`);
@@ -749,6 +792,7 @@ function hitBrick(br) {
     return;
   }
   br.hp--;
+  if (br.kind === 's' && t < hammerUntil) br.hp = 0; // hammer smashes armored bricks in one hit
   br.flash = 1;
   score += 10;
   if (br.hp <= 0) destroyBrick(br, cx, cy);
@@ -790,12 +834,18 @@ function applyPowerup(type) {
   score += 25;
   paddle.flash = 1;
   navigator.vibrate?.(10);
-  burst(paddle.x, paddle.y - 10, PU_TYPES[type].color, 12, 110);
+  if (type === 'hammer') {
+    for (let i = 0; i < 4; i++) burst(paddle.x, paddle.y - 10, `hsl(${i * 90}, 95%, 65%)`, 4, 110);
+  } else {
+    burst(paddle.x, paddle.y - 10, PU_TYPES[type].color, 12, 110);
+  }
   if (type === 'wide') {
     wideUntil = t + WIDE_S;
     paddle.targetW = PADDLE_WIDE_W;
   } else if (type === 'slow') {
     slowUntil = t + SLOW_S;
+  } else if (type === 'hammer') {
+    hammerUntil = t + HAMMER_S;
   } else if (type === 'multi') {
     const src = balls[0];
     if (src) {
@@ -817,6 +867,10 @@ function updatePowerups(dt) {
   for (const pu of powerups) {
     if (!pu.alive) continue;
     pu.y += POWERUP_FALL * dt;
+    if (pu.type === 'hammer') {
+      pu.sparkleT = (pu.sparkleT || 0) - dt;
+      if (pu.sparkleT <= 0) { spawnSparkle(pu.x, pu.y); pu.sparkleT = 0.05; }
+    }
     const hw = paddle.w / 2 + 4, hh = paddle.h / 2 + 4;
     if (pu.y + PU_H / 2 > paddle.y - hh && pu.y - PU_H / 2 < paddle.y + hh &&
         pu.x + PU_W / 2 > paddle.x - hw && pu.x - PU_W / 2 < paddle.x + hw) {
@@ -978,8 +1032,9 @@ function drawBalls() {
 }
 
 function drawPowerups() {
+  const hammerFrame = Math.floor(t * 18) % HAMMER_FRAMES;
   for (const pu of powerups) {
-    const spr = powerupSprite(pu.type);
+    const spr = powerupSprite(pu.type, hammerFrame);
     ctx.save();
     ctx.translate(pu.x, pu.y);
     ctx.rotate(Math.sin(t * 3 + pu.phase) * 0.14);
