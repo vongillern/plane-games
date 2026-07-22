@@ -30,7 +30,7 @@ const KEY_PADDLE_SPEED = 560;    // u/s while holding an arrow key
 const SPEED_RAMP = 7;            // u/s gained per second within a level
 const POWERUP_FALL = 150;        // u/s
 const POWERUP_CHANCE = 0.13;
-const WIDE_S = 10, SLOW_S = 8, SLOW_MUL = 0.62;
+const WIDE_S = 10, SLOW_S = 8, SLOW_MUL = 0.62, HAMMER_S = 9;
 const START_LIVES = 3, MAX_LIVES = 5;
 const TRAIL_N = 10;
 const BANNER_S = 1.35;
@@ -44,6 +44,7 @@ const PU_TYPES = {
   wide: { color: '#38bdf8', weight: 0.32 },
   slow: { color: '#a78bfa', weight: 0.26 },
   multi: { color: '#f97316', weight: 0.28 },
+  hammer: { color: '#fbbf24', weight: 0.2 },
   life: { color: '#f43f5e', weight: 0.14 },
 };
 
@@ -274,6 +275,14 @@ function powerupSprite(type) {
       for (const [dx, dy] of [[-5.5, 1.5], [0, -2.5], [5.5, 1.5]]) {
         g.beginPath(); g.arc(cx + dx, cy + dy, 2.6, 0, TAU); g.fill();
       }
+    } else if (type === 'hammer') {
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(-0.55);
+      roundRectPath(g, -5, -5.5, 10, 4.6, 1.4); // head
+      g.fill();
+      g.beginPath(); g.moveTo(0, -1.2); g.lineTo(0, 6); g.stroke(); // handle
+      g.restore();
     } else if (type === 'life') {
       g.beginPath();
       g.moveTo(cx, cy + 4.6);
@@ -458,7 +467,7 @@ let state = 'ready'; // 'ready' | 'serve' | 'playing' | 'banner' | 'over'
 let paddle, balls, bricks, powerups, breakableLeft;
 let score, lives, level, best;
 let levelBaseSpeed = 350, levelSpeedCap = 480;
-let wideUntil = 0, slowUntil = 0;
+let wideUntil = 0, slowUntil = 0, hammerUntil = 0;
 let shake = 0;
 let bannerUntil = 0;
 let t = 0;
@@ -499,7 +508,7 @@ function newGame() {
   level = 1;
   paddle = makePaddle();
   powerups = [];
-  wideUntil = slowUntil = 0;
+  wideUntil = slowUntil = hammerUntil = 0;
   shake = 0;
   buildLevel(level);
   spawnServeBall();
@@ -549,7 +558,7 @@ function loseBall() {
   shake = 1;
   navigator.vibrate?.(10);
   powerups.length = 0;
-  wideUntil = slowUntil = 0;
+  wideUntil = slowUntil = hammerUntil = 0;
   paddle.targetW = PADDLE_W;
   if (lives <= 0) {
     updateHUD();
@@ -566,7 +575,7 @@ function beginBanner() {
   bannerUntil = t + BANNER_S;
   balls.length = 0;
   powerups.length = 0;
-  wideUntil = slowUntil = 0;
+  wideUntil = slowUntil = hammerUntil = 0;
   paddle.targetW = PADDLE_W;
   navigator.vibrate?.(10);
   showBanner(`LEVEL ${level + 1}`);
@@ -749,6 +758,7 @@ function hitBrick(br) {
     return;
   }
   br.hp--;
+  if (br.kind === 's' && t < hammerUntil) br.hp = 0; // hammer smashes armored bricks in one hit
   br.flash = 1;
   score += 10;
   if (br.hp <= 0) destroyBrick(br, cx, cy);
@@ -796,6 +806,8 @@ function applyPowerup(type) {
     paddle.targetW = PADDLE_WIDE_W;
   } else if (type === 'slow') {
     slowUntil = t + SLOW_S;
+  } else if (type === 'hammer') {
+    hammerUntil = t + HAMMER_S;
   } else if (type === 'multi') {
     const src = balls[0];
     if (src) {
