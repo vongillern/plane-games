@@ -6,6 +6,7 @@ import * as THREE from './vendor/three.module.js';
 const TAU = Math.PI * 2;
 const ACCENT = 0x22d3ee;
 const DANGER = 0xff4d5e;
+const GOLD = 0xffc24d;
 
 const SLOTS = 16;
 const SLOT_ANGLE = TAU / SLOTS;
@@ -31,7 +32,45 @@ const BASE_FOV = 55;
 const SENS = 0.009;                   // radians per pixel of drag
 const KEY_SPEED = 2.6;
 
+const LEVEL_LEN = 12;                 // rings per level
+const SLOW_SCALE = 0.55;              // physics speed while slow-mo is active
+const SLOW_TIME = 6;                  // seconds granted per slow-mo token
+
 const BEST_KEY = 'am.drop.best';
+const SAVE_KEY = 'am.drop.save';
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+function loadSave() {
+  const defaults = {
+    stars: 0,
+    ball: 'comet',
+    maxLevel: 1,
+    done: {},               // challenge id -> true
+    unlocked: {},           // ball id -> true (unlock toast already shown)
+    stats: { bounces: 0, smashes: 0, tokens: 0 },
+  };
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (!raw || typeof raw !== 'object') return defaults;
+    return {
+      ...defaults,
+      ...raw,
+      done: { ...(raw.done || {}) },
+      unlocked: { ...(raw.unlocked || {}) },
+      stats: { ...defaults.stats, ...(raw.stats || {}) },
+    };
+  } catch {
+    return defaults;
+  }
+}
+
+const save = loadSave();
+
+function persist() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch {}
+}
 
 // ---------------------------------------------------------------------------
 // Renderer / scene / camera
@@ -76,12 +115,69 @@ scene.add(column);
 const tower = new THREE.Group();
 scene.add(tower);
 
-// Ball
-const ball = new THREE.Mesh(
-  new THREE.SphereGeometry(BALL_R, 32, 24),
-  new THREE.MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.65, roughness: 0.25, metalness: 0.0 })
-);
-scene.add(ball);
+// ---------------------------------------------------------------------------
+// Ball skins
+// ---------------------------------------------------------------------------
+const sphereGeo = new THREE.SphereGeometry(BALL_R, 32, 24);
+const icoGeo = new THREE.IcosahedronGeometry(BALL_R, 0);
+
+const BALLS = [
+  {
+    id: 'comet', name: 'Comet', cost: 0, halo: ACCENT, spin: 0,
+    make: () => new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({
+      color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.65, roughness: 0.25, metalness: 0.0
+    })),
+  },
+  {
+    id: 'soccer', name: 'Soccer', cost: 3, halo: 0xe8f2ff, spin: 1.4,
+    make: () => new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({
+      map: texSoccer(), emissive: 0xbfd2e6, emissiveIntensity: 0.14, roughness: 0.5, metalness: 0.0
+    })),
+  },
+  {
+    id: 'basket', name: 'Basketball', cost: 6, halo: 0xff9a3c, spin: 1.4,
+    make: () => new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({
+      map: texBasketball(), emissive: 0xff8c3a, emissiveIntensity: 0.16, roughness: 0.6, metalness: 0.0
+    })),
+  },
+  {
+    id: 'prism', name: 'Prism', cost: 10, halo: 0xa78bfa, spin: 0.9,
+    make: () => new THREE.Mesh(icoGeo, new THREE.MeshStandardMaterial({
+      color: 0x9d8bff, emissive: 0x7c5cff, emissiveIntensity: 0.5, roughness: 0.15, metalness: 0.35, flatShading: true
+    })),
+  },
+  {
+    id: 'dragon', name: 'Dragon Orb', cost: 15, halo: 0xffb020, spin: 0.8,
+    make: () => new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({
+      map: texDragon(), emissive: 0xffb020, emissiveIntensity: 0.38, roughness: 0.12, metalness: 0.1
+    })),
+  },
+];
+
+function ballDef(id) { return BALLS.find((b) => b.id === id) || BALLS[0]; }
+function ballUnlocked(def) { return def.cost <= save.stars || def.id === save.ball; }
+
+// Ball: wrapper handles position + squash, inner mesh handles skin spin
+const ballWrap = new THREE.Group();
+scene.add(ballWrap);
+let ball = null;
+let curBall = null;
+let baseEmissive = 0.65;
+
+function applyBall(id) {
+  const def = ballDef(id);
+  if (ball) {
+    ballWrap.remove(ball);
+    ball.material.dispose();
+  }
+  ball = def.make();
+  baseEmissive = ball.material.emissiveIntensity;
+  ballWrap.add(ball);
+  curBall = def;
+  halo.material.color.setHex(def.halo);
+  save.ball = def.id;
+  persist();
+}
 
 // Halo sprite behind ball
 const halo = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -89,6 +185,14 @@ const halo = new THREE.Sprite(new THREE.SpriteMaterial({
 }));
 halo.scale.set(3.2, 3.2, 1);
 scene.add(halo);
+
+// Shield bubble around the ball
+const shieldMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(BALL_R * 1.5, 24, 18),
+  new THREE.MeshBasicMaterial({ color: 0x34d399, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false })
+);
+shieldMesh.visible = false;
+scene.add(shieldMesh);
 
 // Splash ring pool
 const splashGeo = new THREE.RingGeometry(0.55, 0.75, 40);
@@ -105,6 +209,124 @@ for (let i = 0; i < 6; i++) {
 
 // Broken pieces (fever smash debris)
 const pieces = [];
+
+// ---------------------------------------------------------------------------
+// Power-ups
+// ---------------------------------------------------------------------------
+const POWERS = {
+  shield: { name: 'SHIELD', color: 0x34d399, geo: new THREE.TorusGeometry(0.3, 0.12, 12, 24) },
+  slow:   { name: 'SLOW-MO', color: 0x60a5fa, geo: new THREE.OctahedronGeometry(0.4, 0) },
+  blaze:  { name: 'BLAZE', color: 0xf59e0b, geo: new THREE.TetrahedronGeometry(0.46, 0) },
+};
+
+let shieldOn = false;
+let slowT = 0;
+let nextTokenAt = 0;
+
+function pickPower() {
+  const keys = Object.keys(POWERS);
+  return keys[(Math.random() * keys.length) | 0];
+}
+
+function addToken(ring, slots) {
+  const gaps = [];
+  for (let i = 0; i < SLOTS; i++) if (slots[i] === 0) gaps.push(i);
+  if (!gaps.length) return;
+  const slot = gaps[(Math.random() * gaps.length) | 0];
+  const type = pickPower();
+  const p = POWERS[type];
+  const pivot = new THREE.Group();
+  pivot.rotation.y = slot * SLOT_ANGLE + SLOT_ANGLE * 0.03;
+  const mid = SLOT_ANGLE * 0.47;
+  const mesh = new THREE.Mesh(p.geo, new THREE.MeshStandardMaterial({
+    color: p.color, emissive: p.color, emissiveIntensity: 0.9, roughness: 0.3, metalness: 0.1
+  }));
+  mesh.position.set(Math.cos(mid) * ORBIT_R, 1.05, Math.sin(mid) * ORBIT_R);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeHaloTexture(), color: p.color, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.7
+  }));
+  glow.scale.set(1.8, 1.8, 1);
+  glow.position.copy(mesh.position);
+  pivot.add(mesh);
+  pivot.add(glow);
+  ring.group.add(pivot);
+  ring.token = { type, slot, pivot, mesh };
+}
+
+function collectToken(ring) {
+  const t = ring.token;
+  if (!t || t.slot !== slotIndexAtBall()) return;
+  ring.group.remove(t.pivot);
+  t.mesh.material.dispose();
+  ring.token = null;
+  run.tokens++;
+  save.stats.tokens++;
+  const p = POWERS[t.type];
+  if (t.type === 'shield') setShield(true);
+  else if (t.type === 'slow') slowT = Math.min(10, slowT + SLOW_TIME);
+  else if (t.type === 'blaze') fever = true;
+  toast(p.name + '!', 'toast-power', '#' + p.color.toString(16).padStart(6, '0'));
+  spawnSplash(ring.y, p.color);
+  navigator.vibrate?.(15);
+  checkChallenges();
+}
+
+function setShield(on) {
+  shieldOn = on;
+  shieldMesh.visible = on;
+  chipShield.hidden = !on;
+}
+
+// ---------------------------------------------------------------------------
+// Challenges
+// ---------------------------------------------------------------------------
+const CHALLENGES = [
+  { id: 'score10',  name: 'Warming Up',     desc: 'Score 10 in one run',            stars: 1, target: 10,  get: () => run.score },
+  { id: 'fall5',    name: 'Free Fall',      desc: 'Pass 5 rings in one drop',       stars: 1, target: 5,   get: () => run.maxStreak },
+  { id: 'smash1',   name: 'First Smash',    desc: 'Smash a platform with fever',    stars: 1, target: 1,   get: () => run.smashes },
+  { id: 'level3',   name: 'Going Down',     desc: 'Reach level 3',                  stars: 2, target: 3,   get: () => run.level },
+  { id: 'score25',  name: 'In the Zone',    desc: 'Score 25 in one run',            stars: 2, target: 25,  get: () => run.score },
+  { id: 'token5',   name: 'Collector',      desc: 'Grab 5 power-ups in total',      stars: 2, target: 5,   get: () => save.stats.tokens },
+  { id: 'smash3',   name: 'Demolition',     desc: 'Smash 3 platforms in one run',   stars: 2, target: 3,   get: () => run.smashes },
+  { id: 'bounce200', name: 'Bouncy',        desc: 'Bounce 200 times in total',      stars: 2, target: 200, get: () => save.stats.bounces },
+  { id: 'level5',   name: 'Deep Cut',       desc: 'Reach level 5',                  stars: 3, target: 5,   get: () => run.level },
+  { id: 'score50',  name: 'Unstoppable',    desc: 'Score 50 in one run',            stars: 3, target: 50,  get: () => run.score },
+  { id: 'shield1',  name: 'Guardian',       desc: 'Block a red slot with a shield', stars: 2, target: 1,   get: () => run.shieldSaves },
+  { id: 'fall8',    name: 'Skydiver',       desc: 'Pass 8 rings in one drop',       stars: 3, target: 8,   get: () => run.maxStreak },
+  { id: 'smash25',  name: 'Wrecking Ball',  desc: 'Smash 25 platforms in total',    stars: 3, target: 25,  get: () => save.stats.smashes },
+  { id: 'level8',   name: 'Into the Abyss', desc: 'Reach level 8',                  stars: 4, target: 8,   get: () => run.level },
+  { id: 'score100', name: 'Century',        desc: 'Score 100 in one run',           stars: 5, target: 100, get: () => run.score },
+];
+
+function activeChallenges() {
+  return CHALLENGES.filter((c) => !save.done[c.id]).slice(0, 3);
+}
+
+function checkChallenges() {
+  let earned = 0;
+  for (const c of activeChallenges()) {
+    if (c.get() >= c.target) {
+      save.done[c.id] = true;
+      earned += c.stars;
+      run.starsEarned += c.stars;
+      toast('★ ' + c.name + '  +' + c.stars + '★', 'toast-star');
+    }
+  }
+  if (earned) addStars(earned);
+}
+
+function addStars(n) {
+  save.stars += n;
+  persist();
+  starsValEl.textContent = save.stars;
+  for (const def of BALLS) {
+    if (def.cost > 0 && def.cost <= save.stars && !save.unlocked[def.id]) {
+      save.unlocked[def.id] = true;
+      persist();
+      toast('New ball unlocked: ' + def.name + '!', 'toast-unlock');
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -127,8 +349,18 @@ let camGoalY = 2;
 let bounceAnim = 0;          // squash-and-stretch envelope (1 -> 0)
 let camShake = 0;
 let fovPulse = 0;
+let worldT = 0;              // running clock for token bobbing
 
 let best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
+
+// per-run counters feeding challenges
+const run = { score: 0, smashes: 0, maxStreak: 0, level: 1, tokens: 0, shieldSaves: 0, starsEarned: 0 };
+function resetRun() {
+  run.score = 0; run.smashes = 0; run.maxStreak = 0; run.level = 1;
+  run.tokens = 0; run.shieldSaves = 0; run.starsEarned = 0;
+}
+
+function curLevel() { return Math.floor(passIndex / LEVEL_LEN) + 1; }
 
 // ---------------------------------------------------------------------------
 // DOM
@@ -136,30 +368,155 @@ let best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0;
 const hud = document.getElementById('hud');
 const scoreEl = document.getElementById('score');
 const bestValEl = document.getElementById('bestVal');
+const starsValEl = document.getElementById('starsVal');
+const lvlCurEl = document.getElementById('lvlCur');
+const lvlNextEl = document.getElementById('lvlNext');
+const lvlFillEl = document.getElementById('lvlFill');
+const chipShield = document.getElementById('chipShield');
+const chipSlow = document.getElementById('chipSlow');
+const chipSlowFill = document.getElementById('chipSlowFill');
+const chipBlaze = document.getElementById('chipBlaze');
+const slowFx = document.getElementById('slowfx');
+const toastsEl = document.getElementById('toasts');
 const startEl = document.getElementById('start');
 const overEl = document.getElementById('over');
 const overScoreEl = document.getElementById('overScore');
 const overBestEl = document.getElementById('overBest');
+const overLevelEl = document.getElementById('overLevel');
+const overStarsEl = document.getElementById('overStars');
 bestValEl.textContent = best;
+starsValEl.textContent = save.stars;
+
+function toast(text, cls, color) {
+  const div = document.createElement('div');
+  div.className = 'toast ' + (cls || '');
+  div.textContent = text;
+  if (color) div.style.color = color;
+  toastsEl.appendChild(div);
+  while (toastsEl.children.length > 3) toastsEl.removeChild(toastsEl.firstChild);
+  setTimeout(() => { div.classList.add('out'); }, 1700);
+  setTimeout(() => { div.remove(); }, 2100);
+}
+
+function setLevelBar() {
+  const lvl = curLevel();
+  lvlCurEl.textContent = lvl;
+  lvlNextEl.textContent = lvl + 1;
+  lvlFillEl.style.width = ((passIndex % LEVEL_LEN) / LEVEL_LEN * 100).toFixed(1) + '%';
+}
+
+// ---------------------------------------------------------------------------
+// Ball picker + challenge list UI (rendered into both overlays)
+// ---------------------------------------------------------------------------
+const previews = {};
+
+function buildPreviews() {
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  r.setPixelRatio(1);
+  r.setSize(112, 112);
+  r.outputColorSpace = THREE.SRGBColorSpace;
+  const sc = new THREE.Scene();
+  sc.add(new THREE.HemisphereLight(0xbfc4ff, 0x11101c, 1.1));
+  const d = new THREE.DirectionalLight(0xffffff, 1.6);
+  d.position.set(2, 3, 4);
+  sc.add(d);
+  const cam = new THREE.PerspectiveCamera(32, 1, 0.1, 10);
+  cam.position.set(0, 0.35, 2.45);
+  cam.lookAt(0, 0, 0);
+  for (const def of BALLS) {
+    const mesh = def.make();
+    mesh.rotation.set(0.35, -0.7, 0);
+    sc.add(mesh);
+    r.render(sc, cam);
+    previews[def.id] = r.domElement.toDataURL();
+    sc.remove(mesh);
+    mesh.material.dispose();
+  }
+  r.dispose();
+  r.forceContextLoss?.();
+}
+
+function renderPickers() {
+  for (const el of document.querySelectorAll('.picker')) {
+    el.innerHTML = '';
+    for (const def of BALLS) {
+      const unlocked = ballUnlocked(def);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ball-btn' + (def.id === save.ball ? ' sel' : '') + (unlocked ? '' : ' locked');
+      const img = document.createElement('img');
+      img.src = previews[def.id] || '';
+      img.alt = def.name;
+      img.draggable = false;
+      btn.appendChild(img);
+      const tag = document.createElement('span');
+      tag.className = 'ball-tag';
+      tag.textContent = unlocked ? def.name : def.cost + '★';
+      btn.appendChild(tag);
+      for (const t of ['pointerdown', 'pointerup', 'click']) {
+        btn.addEventListener(t, (e) => e.stopPropagation());
+      }
+      btn.addEventListener('click', () => {
+        if (unlocked) {
+          applyBall(def.id);
+          renderPickers();
+        } else {
+          toast('Earn ' + (def.cost - save.stars) + '★ more to unlock ' + def.name, 'toast-dim');
+          btn.classList.add('shake');
+          setTimeout(() => btn.classList.remove('shake'), 350);
+        }
+      });
+      el.appendChild(btn);
+    }
+  }
+}
+
+function renderChallenges() {
+  const active = activeChallenges();
+  for (const el of document.querySelectorAll('.ch-list')) {
+    el.innerHTML = '';
+    if (!active.length) {
+      const donEl = document.createElement('p');
+      donEl.className = 'ch-done-all';
+      donEl.textContent = 'All challenges complete!';
+      el.appendChild(donEl);
+      continue;
+    }
+    for (const c of active) {
+      const v = Math.min(c.target, c.get());
+      const row = document.createElement('div');
+      row.className = 'ch-row';
+      row.innerHTML =
+        '<div class="ch-top"><span class="ch-name">' + c.name + '</span>' +
+        '<span class="ch-val">' + v + '/' + c.target + ' · ' + c.stars + '★</span></div>' +
+        '<div class="ch-desc">' + c.desc + '</div>' +
+        '<div class="ch-bar"><div class="ch-fill" style="width:' + (v / c.target * 100).toFixed(0) + '%"></div></div>';
+      el.appendChild(row);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Ring generation
 // ---------------------------------------------------------------------------
 function makeSlots(index) {
   const slots = new Array(SLOTS).fill(1); // 1 solid, 0 gap, 2 danger
-  const gapWidth = Math.max(2, 4 - Math.floor(index / 12));
+  const lvl = Math.floor(index / LEVEL_LEN) + 1;
+  const pos = index % LEVEL_LEN;
+
+  const gapWidth = Math.max(2, 4 - Math.floor((lvl - 1) / 3));
   const gapStart = (Math.random() * SLOTS) | 0;
   for (let k = 0; k < gapWidth; k++) slots[(gapStart + k) % SLOTS] = 0;
 
-  // occasional second gap once deep
-  if (index > 18 && Math.random() < 0.4) {
+  // occasional second gap once the tower deepens
+  if (lvl >= 2 && Math.random() < Math.min(0.5, 0.1 + lvl * 0.06)) {
     const g2 = (gapStart + (SLOTS / 2) + (((Math.random() * 3) | 0) - 1) + SLOTS) % SLOTS;
     for (let k = 0; k < 2; k++) slots[(g2 + k) % SLOTS] = 0;
   }
 
-  // danger ramps in after a short grace period
-  if (index > 2) {
-    const dFrac = Math.min(0.55, index * 0.02);
+  // danger ramps with level; the first two rings of each level are a breather
+  if (index > 2 && pos >= 2) {
+    const dFrac = Math.min(0.55, 0.04 + (lvl - 1) * 0.055 + pos * 0.004);
     for (let i = 0; i < SLOTS; i++) {
       if (slots[i] === 1 && Math.random() < dFrac) slots[i] = 2;
     }
@@ -183,7 +540,11 @@ function createRing(index) {
     group.add(mesh);
   }
   tower.add(group);
-  const ring = { index, group, slots, y: group.position.y };
+  const ring = { index, group, slots, y: group.position.y, token: null };
+  if (index >= nextTokenAt && index > 2) {
+    addToken(ring, slots);
+    nextTokenAt = index + 8 + ((Math.random() * 7) | 0);
+  }
   ringMap.set(index, ring);
   return ring;
 }
@@ -220,6 +581,11 @@ function slotTypeAtBall(ring) {
 // Fever smash: detach a ring's segments and fling them
 // ---------------------------------------------------------------------------
 function smashRing(ring) {
+  if (ring.token) {
+    ring.group.remove(ring.token.pivot);
+    ring.token.mesh.material.dispose();
+    ring.token = null;
+  }
   const meshes = ring.group.children.slice();
   for (const mesh of meshes) {
     scene.attach(mesh); // preserve world transform
@@ -239,6 +605,8 @@ function smashRing(ring) {
   }
   tower.remove(ring.group);
   ringMap.delete(ring.index);
+  run.smashes++;
+  save.stats.smashes++;
   camShake = 0.55;
   fovPulse = 7;
   navigator.vibrate?.(20);
@@ -296,7 +664,31 @@ function bounce(ring) {
   bounceAnim = 1;
   combo = 0;
   fever = false;
-  spawnSplash(ring.y, ACCENT);
+  save.stats.bounces++;
+  spawnSplash(ring.y, curBall.halo);
+  checkChallenges();
+}
+
+function afterPass() {
+  run.score = score;
+  run.maxStreak = Math.max(run.maxStreak, combo);
+  const lvl = curLevel();
+  if (lvl > run.level) {
+    run.level = lvl;
+    let msg = 'LEVEL ' + lvl;
+    if (lvl > save.maxLevel) {
+      save.maxLevel = lvl;
+      run.starsEarned += 1;
+      addStars(1);
+      msg += '  +1★';
+    }
+    toast(msg, 'toast-level');
+    spawnSplash(ballY - BALL_R, GOLD);
+    fovPulse = 6;
+    navigator.vibrate?.([15, 40, 15]);
+  }
+  setLevelBar();
+  checkChallenges();
 }
 
 function passRing() {
@@ -307,6 +699,19 @@ function passRing() {
   navigator.vibrate?.(10);
   setScore(score);
   popScore();
+  afterPass();
+}
+
+function smashPass(ring) {
+  smashRing(ring);
+  score++;
+  passIndex++;
+  combo = 0;
+  fever = false;
+  navigator.vibrate?.(10);
+  setScore(score);
+  popScore();
+  afterPass();
 }
 
 let popTimer = 0;
@@ -323,20 +728,21 @@ function resolveCollisions() {
   if (ballVy < 0 && ballY <= contactY) {
     const type = slotTypeAtBall(ring);
     if (type === 0) {
-      // gap: fall through
+      // gap: fall through (and maybe scoop up a power-up on the way)
+      collectToken(ring);
       passRing();
     } else if (fever) {
       // blaze through the next platform, danger or not — then fever is spent
-      smashRing(ring);
-      score++;
-      passIndex++;
-      combo = 0;
-      fever = false;
-      navigator.vibrate?.(10);
-      setScore(score);
-      popScore();
+      smashPass(ring);
     } else if (type === 2) {
-      die();
+      if (shieldOn) {
+        setShield(false);
+        run.shieldSaves++;
+        toast('SHIELD SAVED YOU', 'toast-power', '#34d399');
+        smashPass(ring);
+      } else {
+        die();
+      }
     } else {
       bounce(ring);
     }
@@ -371,7 +777,12 @@ function resetGame() {
   bounceAnim = 0;
   camShake = 0;
   fovPulse = 0;
+  slowT = 0;
+  setShield(false);
+  nextTokenAt = 5 + ((Math.random() * 4) | 0);
+  resetRun();
   setScore(0);
+  setLevelBar();
   ensureRings();
 }
 
@@ -391,8 +802,14 @@ function die() {
     localStorage.setItem(BEST_KEY, String(best));
     bestValEl.textContent = best;
   }
+  persist();
   overScoreEl.textContent = score;
   overBestEl.textContent = best;
+  overLevelEl.textContent = run.level;
+  overStarsEl.textContent = run.starsEarned > 0 ? '+' + run.starsEarned + '★ earned' : '';
+  overStarsEl.hidden = run.starsEarned === 0;
+  renderPickers();
+  renderChallenges();
   hud.classList.add('dim');
   overEl.classList.remove('hidden');
 }
@@ -480,12 +897,17 @@ function tick(now) {
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.033); // clamp to avoid teleport after tab switch
+  worldT += dt;
 
   updateInput(dt);
 
   if (state === 'playing') {
-    ballVy += GRAVITY * dt;
-    ballY += ballVy * dt;
+    const wasSlow = slowT > 0;
+    slowT = Math.max(0, slowT - dt);
+    if (wasSlow !== (slowT > 0)) slowFx.classList.toggle('on', slowT > 0);
+    const pdt = dt * (slowT > 0 ? SLOW_SCALE : 1);
+    ballVy += GRAVITY * pdt;
+    ballY += ballVy * pdt;
     resolveCollisions();
     ensureRings();
     // safety: fell into the void (shouldn't happen, gaps lead to next ring)
@@ -518,29 +940,60 @@ function idleBounce(dt) {
     ballY = contactY;
     ballVy = BOUNCE_V;
     bounceAnim = 1;
-    spawnSplash(ring ? ring.y : 0, ACCENT);
+    spawnSplash(ring ? ring.y : 0, curBall.halo);
   }
 }
 
 function updateVisuals(dt) {
   // fever amount smoothing
-  feverAmt += (( fever ? 1 : 0) - feverAmt) * Math.min(1, dt * 10);
+  feverAmt += ((fever ? 1 : 0) - feverAmt) * Math.min(1, dt * 10);
 
-  // ball position + squash
-  ball.position.set(0, ballY, ORBIT_R);
+  // ball position + squash on the wrapper, skin spin on the mesh
+  ballWrap.position.set(0, ballY, ORBIT_R);
   bounceAnim = Math.max(0, bounceAnim - dt * 5.5);
   const sq = bounceAnim;
   const fScale = 1 + 0.28 * feverAmt;
-  ball.scale.set((1 + 0.22 * sq) * fScale, (1 - 0.30 * sq) * fScale, (1 + 0.22 * sq) * fScale);
-  ball.material.emissiveIntensity = 0.65 + 1.2 * feverAmt;
-  ball.material.color.setHex(ACCENT).lerp(new THREE.Color(0xffffff), 0.5 * feverAmt);
-  ball.material.emissive.setHex(ACCENT).lerp(new THREE.Color(0xffffff), 0.35 * feverAmt);
+  ballWrap.scale.set((1 + 0.22 * sq) * fScale, (1 - 0.30 * sq) * fScale, (1 + 0.22 * sq) * fScale);
+  if (curBall.spin) {
+    ball.rotation.x -= curBall.spin * dt;
+    if (curBall.id === 'prism') ball.rotation.y += 0.6 * dt;
+  }
+  if (curBall.id === 'comet') {
+    ball.material.emissiveIntensity = 0.65 + 1.2 * feverAmt;
+    ball.material.color.setHex(ACCENT).lerp(new THREE.Color(0xffffff), 0.5 * feverAmt);
+    ball.material.emissive.setHex(ACCENT).lerp(new THREE.Color(0xffffff), 0.35 * feverAmt);
+  } else {
+    ball.material.emissiveIntensity = baseEmissive + 1.1 * feverAmt;
+  }
+
+  // fever chip (armed by combo or a blaze token)
+  chipBlaze.hidden = !fever;
+
+  // slow-mo chip
+  chipSlow.hidden = slowT <= 0;
+  if (slowT > 0) chipSlowFill.style.width = (Math.min(1, slowT / SLOW_TIME) * 100).toFixed(0) + '%';
 
   // halo
-  halo.position.copy(ball.position);
+  halo.position.copy(ballWrap.position);
   halo.scale.setScalar((3.0 + 1.6 * feverAmt) + 0.4 * sq);
   halo.material.opacity = 0.55 + 0.4 * feverAmt;
 
+  // shield bubble
+  if (shieldOn) {
+    shieldMesh.position.copy(ballWrap.position);
+    shieldMesh.scale.setScalar(1 + Math.sin(worldT * 5) * 0.06);
+    shieldMesh.material.opacity = 0.24 + Math.sin(worldT * 5) * 0.06;
+  }
+
+  // power-up tokens: spin and bob
+  for (const [, ring] of ringMap) {
+    if (!ring.token) continue;
+    ring.token.mesh.rotation.y += 2.4 * dt;
+    ring.token.mesh.rotation.x = Math.sin(worldT * 2 + ring.index) * 0.4;
+    ring.token.mesh.position.y = 1.05 + Math.sin(worldT * 3 + ring.index) * 0.14;
+  }
+
+  rim.color.setHex(slowT > 0 ? 0x60a5fa : curBall.halo);
   rim.position.set(0, ballY + 0.5, ORBIT_R);
   rim.intensity = 0.5 + 1.4 * feverAmt;
 
@@ -598,6 +1051,132 @@ function makeHaloTexture() {
   return tex;
 }
 
+function ballCanvas() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  return c;
+}
+
+function canvasTex(c) {
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function drawStar(g, cx, cy, r, color) {
+  g.fillStyle = color;
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rad = i % 2 === 0 ? r : r * 0.45;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const x = cx + Math.cos(a) * rad;
+    const y = cy + Math.sin(a) * rad;
+    if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.closePath();
+  g.fill();
+}
+
+function drawPentagon(g, cx, cy, r, rot, color) {
+  g.fillStyle = color;
+  g.beginPath();
+  for (let i = 0; i < 5; i++) {
+    const a = rot + (i * TAU) / 5;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.closePath();
+  g.fill();
+}
+
+let _texSoccer = null;
+function texSoccer() {
+  if (_texSoccer) return _texSoccer;
+  const c = ballCanvas();
+  const g = c.getContext('2d');
+  g.fillStyle = '#f2f3f7';
+  g.fillRect(0, 0, 512, 256);
+  // faint seams
+  g.strokeStyle = 'rgba(0,0,0,0.12)';
+  g.lineWidth = 3;
+  for (let x = 0; x < 512; x += 85) {
+    g.beginPath(); g.moveTo(x, 0); g.lineTo(x + 40, 128); g.lineTo(x, 256); g.stroke();
+  }
+  // pentagons in two offset rows (wraps horizontally: 512/85 ≈ 6 columns)
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 6; col++) {
+      const cx = col * 85 + (row === 0 ? 22 : 64);
+      const cy = row === 0 ? 74 : 182;
+      drawPentagon(g, cx, cy, 26, row * 0.6 + col * 0.3, '#17171f');
+    }
+  }
+  _texSoccer = canvasTex(c);
+  return _texSoccer;
+}
+
+let _texBasket = null;
+function texBasketball() {
+  if (_texBasket) return _texBasket;
+  const c = ballCanvas();
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#e87a2a');
+  grad.addColorStop(0.5, '#e06a1e');
+  grad.addColorStop(1, '#c85a18');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 512, 256);
+  // pebble specks
+  g.fillStyle = 'rgba(0,0,0,0.06)';
+  for (let i = 0; i < 500; i++) {
+    g.fillRect((Math.random() * 512) | 0, (Math.random() * 256) | 0, 2, 2);
+  }
+  g.strokeStyle = '#1d130c';
+  g.lineWidth = 7;
+  // equator
+  g.beginPath(); g.moveTo(0, 128); g.lineTo(512, 128); g.stroke();
+  // two vertical seams (u=0 and u=0.5 so the texture wraps cleanly)
+  g.beginPath(); g.moveTo(0, 0); g.lineTo(0, 256); g.stroke();
+  g.beginPath(); g.moveTo(512, 0); g.lineTo(512, 256); g.stroke();
+  g.beginPath(); g.moveTo(256, 0); g.lineTo(256, 256); g.stroke();
+  // side curves
+  g.beginPath(); g.ellipse(128, 128, 88, 120, 0, 0, TAU); g.stroke();
+  g.beginPath(); g.ellipse(384, 128, 88, 120, 0, 0, TAU); g.stroke();
+  _texBasket = canvasTex(c);
+  return _texBasket;
+}
+
+let _texDragon = null;
+function texDragon() {
+  if (_texDragon) return _texDragon;
+  const c = ballCanvas();
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#ffd75e');
+  grad.addColorStop(0.5, '#ffb92e');
+  grad.addColorStop(1, '#f59300');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 512, 256);
+  // soft inner glow at the front of the ball (u=0.25 faces the camera start)
+  const rg = g.createRadialGradient(128, 128, 10, 128, 128, 130);
+  rg.addColorStop(0, 'rgba(255,255,255,0.5)');
+  rg.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = rg;
+  g.fillRect(0, 0, 512, 256);
+  // four red stars clustered on the front (classic four-star ball)
+  drawStar(g, 108, 104, 26, '#e0202e');
+  drawStar(g, 152, 118, 26, '#e0202e');
+  drawStar(g, 112, 152, 26, '#e0202e');
+  drawStar(g, 156, 160, 26, '#e0202e');
+  // mirrored cluster on the far side so it reads while spinning
+  drawStar(g, 364, 110, 26, '#e0202e');
+  drawStar(g, 404, 130, 26, '#e0202e');
+  drawStar(g, 370, 156, 26, '#e0202e');
+  _texDragon = canvasTex(c);
+  return _texDragon;
+}
+
 function makeSlotGeo() {
   const shape = new THREE.Shape();
   const span = SLOT_ANGLE * 0.94;
@@ -612,9 +1191,25 @@ function makeSlotGeo() {
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
+applyBall(ballDef(save.ball).cost <= save.stars ? save.ball : 'comet');
+// balls the player could already afford shouldn't re-toast later
+for (const def of BALLS) if (def.cost <= save.stars) save.unlocked[def.id] = true;
+buildPreviews();
+renderPickers();
+renderChallenges();
 resetGame();
 state = 'start';
 requestAnimationFrame(tick);
+
+// tiny debug/test handle (not used by the game itself)
+window.__drop = {
+  get state() { return state; },
+  get save() { return save; },
+  get run() { return run; },
+  addStars,
+  renderPickers,
+  renderChallenges,
+};
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

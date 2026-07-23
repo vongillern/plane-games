@@ -16,15 +16,36 @@
 <body>
   <canvas id="scene"></canvas>
 
+  <div id="slowfx" class="slowfx" aria-hidden="true"></div>
+
   <div id="hud" class="hud">
     <div id="score" class="score" aria-live="polite">0</div>
-    <div id="best" class="best-chip">BEST <span id="bestVal">0</span></div>
+    <div class="lvlbar" aria-label="Level progress">
+      <span id="lvlCur" class="lvl-num">1</span>
+      <div class="lvl-track"><div id="lvlFill" class="lvl-fill"></div></div>
+      <span id="lvlNext" class="lvl-num">2</span>
+    </div>
+    <div class="chip-row">
+      <div class="best-chip">BEST <span id="bestVal">0</span></div>
+      <div class="best-chip star-chip">★ <span id="starsVal">0</span></div>
+    </div>
+    <div class="power-row">
+      <div id="chipShield" class="power-chip p-shield" hidden>SHIELD</div>
+      <div id="chipSlow" class="power-chip p-slow" hidden>SLOW<div class="p-track"><div id="chipSlowFill" class="p-fill"></div></div></div>
+      <div id="chipBlaze" class="power-chip p-blaze" hidden>BLAZE</div>
+    </div>
   </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
   <div id="start" class="overlay">
     <div class="panel">
       <h1 class="title">Drop</h1>
       <p class="hint"><span class="if-touch">drag to rotate the tower</span><span class="if-key">drag or press ← → to rotate</span></p>
+      <p class="section-label">ball</p>
+      <div class="picker" id="pickerStart"></div>
+      <p class="section-label">challenges</p>
+      <div class="ch-list" id="chStart"></div>
       <div class="cta"><span class="if-touch">tap to start</span><span class="if-key">press Space to start</span></div>
       <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>
     </div>
@@ -34,7 +55,10 @@
     <div class="panel">
       <p class="over-label">score</p>
       <div id="overScore" class="over-score">0</div>
-      <p class="over-best">best <span id="overBest">0</span></p>
+      <p class="over-best">best <span id="overBest">0</span> · level <span id="overLevel">1</span></p>
+      <p class="over-stars" id="overStars" hidden></p>
+      <div class="picker" id="pickerOver"></div>
+      <div class="ch-list" id="chOver"></div>
       <div class="cta"><span class="if-touch">tap to play again</span><span class="if-key">press Space to play again</span></div>
     </div>
   </div>
