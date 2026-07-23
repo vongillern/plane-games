@@ -26,3 +26,27 @@ drag = rotate, flick = spin with momentum.
 - Landing on a red slot kills instantly — the genre's stakes; the red is
   visible well before the ball arrives, so it's fair.
 - Taps during play do nothing (the only verbs are rotate and wait).
+
+## Progression (levels, challenges, rewards)
+- **Levels**: every 12 rings. A slim `3 ▸▸▸░░ 4` bar under the score shows
+  progress; difficulty (gap width, red density, second gaps) scales with
+  level, and each level opens with two danger-free breather rings. First
+  time reaching a level pays +1★.
+- **Challenges**: 3 active at a time, visible on the start and game-over
+  screens with progress bars. Completing one mid-run fires a toast and pays
+  stars; the next challenge in the queue takes its place.
+- **Stars → balls**: stars unlock ball skins (Soccer 3★, Basketball 6★,
+  Prism 10★, Dragon Orb 15★). Picker on both overlays; locked balls show
+  their cost, tapping one says how many more stars are needed. All balls
+  bounce identically — cosmetics only, no pay-to-win-by-grinding.
+- **Power-ups**: glowing tokens float in one specific slot of a gap every
+  ~8–14 rings; you collect by *falling through that side of the gap* —
+  aim is the skill. Color + shape + a named toast teach the mapping:
+  - **Shield** (green torus): blocks one red slot, smashing it.
+    Bubble + HUD chip while held.
+  - **Slow-mo** (blue octahedron): 6s slower physics; blue vignette +
+    draining chip.
+  - **Blaze** (orange tetra): instant fever — smash the next platform.
+- Mid-run HUD stays minimal: score, level bar, best/★ chips, and chips
+  only for *currently held* power-ups. Everything persists in
+  localStorage (`am.drop.save`), fully offline.

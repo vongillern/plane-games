@@ -1,4 +1,4 @@
-const CACHE = 'am-drop-v3';
+const CACHE = 'am-drop-v4';
 const ASSETS = [
   './',
   './index.html',
