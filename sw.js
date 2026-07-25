@@ -1,4 +1,4 @@
-const CACHE = 'am-hub-v12';
+const CACHE = 'am-hub-v13';
 
 const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker', 'carve', 'sink'];
 const GAME_FILES = [
@@ -15,6 +15,7 @@ const GAME_FILES = [
 const ASSETS = [
   './',
   './index.html',
+  './update.js',
   './style.css',
   './manifest.webmanifest',
   './icon-192.png',
@@ -27,8 +28,12 @@ const ASSETS = [
   './games/span/physics.js',
   './games/span/levels.js',
 ];
+// 2048 is turn-based: it has no pause.js to cache
+const NO_PAUSE = ['2048'];
 for (const g of GAMES) {
   for (const f of GAME_FILES) ASSETS.push('./games/' + g + '/' + f);
+  ASSETS.push('./games/' + g + '/update.js');
+  if (NO_PAUSE.indexOf(g) === -1) ASSETS.push('./games/' + g + '/pause.js');
 }
 
 self.addEventListener('install', (e) => {
@@ -72,4 +77,11 @@ self.addEventListener('fetch', (e) => {
         .catch(() => offlineFallback(req));
     })
   );
+});
+
+// the page asks what build it is running (see update.js)
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) {
+    e.source.postMessage({ type: 'version', version: CACHE });
+  }
 });

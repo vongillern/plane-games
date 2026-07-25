@@ -1,3 +1,5 @@
+import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 // Span — a bridge builder. Offline PWA, vanilla ES module.
 // Build with drags, test with deterministic Verlet physics (see physics.js).
 
@@ -1042,6 +1044,7 @@ let lastTs = 0;
 function frame(now) {
   const dt = Math.min((now - lastTs) / 1000, 0.1);
   lastTs = now;
+  if (pause.active) { requestAnimationFrame(frame); return; }
 
   if (screen === 'test' && sim) {
     if (sim.status === 'running') {
@@ -1162,8 +1165,12 @@ level = LEVELS[0];
 resetBridge();
 sizeCanvas();
 goMenu();
+// only the bridge test is a running clock; the workshop has nothing to freeze
+const pause = installPause({
+  canPause: () => screen === 'test',
+  top: 74,                                    // below the topbar and its budget chip
+});
 requestAnimationFrame((t) => { lastTs = t; requestAnimationFrame(frame); });
 
-if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => screen === 'menu' });

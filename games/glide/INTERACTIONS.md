@@ -9,6 +9,12 @@ through gaps. Zero UI to think about mid-flight.
 - **Tap anywhere on screen** → flap. Also starts the game from the title and
   restarts from game over. The entire viewport is the button.
 - Keyboard: Space / ↑ / Enter flap; R restarts when over.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability
 - Start overlay: "tap to stay aloft" — the flappy convention finishes the

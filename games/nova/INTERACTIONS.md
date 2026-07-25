@@ -28,6 +28,12 @@ prefer discrete steering.
   during play is simply satisfied — lasers already fire.
 - Firing is **automatic** by design: no fire button on touch means no
   claw-grip, and the two input schemes stay perfectly symmetric.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability
 - Start overlay: "drag or use ◀ ▶ to fly · lasers fire themselves" — the

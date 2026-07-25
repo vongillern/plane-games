@@ -16,6 +16,12 @@ itself. Everything else — ball, bricks, power-ups — plays out above it.
   ("Break again" button, 52px, also present).
 - Keyboard: ←/→ or A/D hold to move, Space to start/launch/restart, R to
   restart at any time.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability
 - Start overlay teaches the single verb: "drag anywhere to move the paddle."

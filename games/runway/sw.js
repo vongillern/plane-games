@@ -1,10 +1,12 @@
-const CACHE = 'am-runway-v6';
+const CACHE = 'am-runway-v8';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './update.js',
+  './pause.js',
   './manifest.webmanifest',
   './vendor/three.module.js',
   './icon-192.png',
@@ -48,4 +50,11 @@ self.addEventListener('fetch', (event) => {
         .catch(() => caches.match('./index.html'));
     })
   );
+});
+
+// the page asks what build it is running (see update.js)
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) {
+    e.source.postMessage({ type: 'version', version: CACHE });
+  }
 });

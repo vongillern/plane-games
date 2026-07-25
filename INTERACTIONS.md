@@ -13,6 +13,9 @@ cards, each card is one game, tapping it opens the game full-screen.
 - **Scroll** → the only other gesture; the page is a plain vertical scroll.
 - **Add to Home Screen** → explicit button when installable; on iOS it opens a
   share-sheet walkthrough tip instead (no beforeinstallprompt there).
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability
 - Nothing to learn: cards look like buttons (surface, border, hover/active

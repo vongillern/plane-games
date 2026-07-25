@@ -14,6 +14,12 @@ drag = rotate, flick = spin with momentum.
   tower" model.
 - **Tap** (movement < 9px) → start / restart on overlays; nothing mid-run.
 - Keyboard: ←/→ or A/D hold-to-rotate, Space/Enter/R start/restart.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability
 - Start overlay: "drag to rotate the tower" + "tap to start".

@@ -1,9 +1,11 @@
-const CACHE = 'am-drop-v4';
+const CACHE = 'am-drop-v6';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './update.js',
+  './pause.js',
   './manifest.webmanifest',
   './vendor/three.module.js',
   './icon-192.png',
@@ -37,4 +39,11 @@ self.addEventListener('fetch', (e) => {
       }).catch(() => hit);
     })
   );
+});
+
+// the page asks what build it is running (see update.js)
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) {
+    e.source.postMessage({ type: 'version', version: CACHE });
+  }
 });

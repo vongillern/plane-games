@@ -22,6 +22,12 @@ same drag becomes rotation. One verb (drag), two contexts (snow / air).
 - Keyboard: ←/→ or A/D carve (and spin mid-air), Space/Enter jump &
   start/restart, R instant restart, M mute.
 - **Tap anywhere** starts/restarts from the overlays.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Clamp, don't reject
 - The piste is fenced with orange netting. Drifting into it *clamps*
@@ -49,6 +55,12 @@ same drag becomes rotation. One verb (drag), two contexts (snow / air).
   resets). The panel ignores taps for its first 400 ms so the tail of a
   drag that was in flight during the crash can't restart the run by
   accident.
+- **The mountain pulls hard.** You leave the gate at 17 m/s and reach a
+  40 m/s terminal in about six seconds; the old ramp took nearly twenty,
+  which meant the first half of every run was spent waiting to get going.
+  Obstacle rows are spaced in metres, so they moved ~25% further apart to
+  keep the *felt* rhythm — the run is quicker, not harder. Scores are
+  distance, so a run of the same length now scores higher than it used to.
 - Attract mode: on the start screen the rider slowly cruises the slope
   behind the panel, showing the scene before the first input.
 

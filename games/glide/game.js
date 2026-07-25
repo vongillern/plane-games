@@ -1,12 +1,7 @@
+import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 // Glide — a night-flight paper plane game.
 // Airplane Mode collection. Fully offline, canvas 2D.
-
-// ---------- Service worker ----------
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
 
 // ---------- DOM ----------
 const canvas = document.getElementById('game');
@@ -618,6 +613,7 @@ let lastT = performance.now();
 function frame(now) {
   let dt = (now - lastT) / 1000;
   lastT = now;
+  if (pause.active) { requestAnimationFrame(frame); return; }
   if (document.hidden) {
     requestAnimationFrame(frame);
     return;
@@ -638,4 +634,7 @@ window.addEventListener('resize', resize);
 resize();
 bestScoreEl.textContent = String(best);
 plane.y = H * 0.46;
+const pause = installPause({ canPause: () => state === PLAYING });
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== PLAYING });
 requestAnimationFrame(frame);

@@ -26,6 +26,12 @@ Landscape, always. Bridges are wide; the gap must get the long axis.
 - Keyboard: 1–4 materials, E erase, R reset, Esc menu.
 - Hit radii are px-based (`snapRadius()` ≈ 26px, `eraseRadius()` ≈ 20px)
   converted to world units, so fingers work at any zoom.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability
 - Level 1 is the tutorial: gap of 2, one obvious drag, intro line literally

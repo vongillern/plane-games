@@ -1,4 +1,6 @@
+import { installPause } from './pause.js';
 import * as THREE from './vendor/three.module.js';
+import { installUpdates } from './update.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -894,6 +896,7 @@ let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
   if (hidden) return;
+  if (pause.active) { last = now; return; }
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.033); // clamp to avoid teleport after tab switch
@@ -1199,6 +1202,7 @@ renderPickers();
 renderChallenges();
 resetGame();
 state = 'start';
+const pause = installPause({ canPause: () => state === 'playing' });
 requestAnimationFrame(tick);
 
 // tiny debug/test handle (not used by the game itself)
@@ -1211,8 +1215,5 @@ window.__drop = {
   renderChallenges,
 };
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== 'playing' });

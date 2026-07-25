@@ -1,4 +1,6 @@
 import * as THREE from './vendor/three.module.js';
+import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -9,8 +11,13 @@ const TAU = Math.PI * 2;
 // increasing downhill). World z = -s; world y descends with GRADE.
 const GRADE = 0.22;              // fall-line gradient (~12.5°)
 const G = 26;                    // gravity (m/s²) — tuned for arcade arcs
-const START_V = 13;              // downhill speed at the gate (m/s)
-const MAX_V = 32;                // terminal speed
+const START_V = 17;              // downhill speed at the gate (m/s)
+const MAX_V = 40;                // terminal speed
+// How hard the mountain pulls. The old ramp had a ~17s time constant, so the
+// first half of every run was spent waiting to get going; this reaches cruising
+// speed in about six seconds and keeps a floor under it at the top end.
+const PULL = 0.16;               // accel = (MAX_V - v) * PULL
+const PULL_MIN = 0.9;            // ...never less than this (m/s²)
 const STEER_MAX = 0.60;          // max |vx| as a fraction of v
 const DRAG_FULL = 140;           // px of horizontal drag for full carve lock
 const SPIN_PER_PX = 0.016;       // rad of air-spin per px of drag
@@ -893,7 +900,9 @@ function generateTo(sMax) {
   }
   while (nextObstacleS < sMax) {
     if (nextObstacleS > 60) spawnObstacleRow(nextObstacleS);
-    nextObstacleS += rand(6.5, 9.5);
+    // spacing is in metres but difficulty is felt in seconds: the run is ~25%
+    // quicker than it was, so the rows move ~25% further apart to match
+    nextObstacleS += rand(8, 12);
   }
   while (nextChaletS < sMax) {
     if (nextChaletS > 40) spawnChaletCluster(nextChaletS);
@@ -1501,7 +1510,7 @@ function updatePlaying(dt) {
   elapsed += dt;
   const p = player;
 
-  const accel = Math.max(0.24, (MAX_V - p.v) * 0.06);
+  const accel = Math.max(PULL_MIN, (MAX_V - p.v) * PULL);
   p.v = Math.min(p.v + accel * dt, MAX_V + 2);
 
   const prevS = p.s;
@@ -1752,7 +1761,7 @@ function updateCamera(dt) {
   // portrait phones get a wider vertical FOV so the horizontal view still
   // spans the piste — otherwise a tall screen crops both fences out
   const aspectBoost = camera.aspect < 1 ? (1 - camera.aspect) * 17 : 0;
-  const fov = BASE_FOV + aspectBoost + 9 * speedNorm * speedNorm + fovKick;
+  const fov = BASE_FOV + aspectBoost + 12 * speedNorm * speedNorm + fovKick;
   if (Math.abs(camera.fov - fov) > 0.05) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
@@ -1794,6 +1803,7 @@ let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
   if (hidden) return;
+  if (pause.active) { last = now; return; }
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.033);
@@ -1810,8 +1820,12 @@ function tick(now) {
 
   renderer.render(scene, camera);
 }
+const pause = installPause({
+  canPause: () => state === 'playing',
+  right: 68,                                  // clear of the mute button
+  onPause: () => { AudioFX.setCarve(0); AudioFX.setWind(0); },
+});
 requestAnimationFrame(tick);
 
-if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== 'playing' });

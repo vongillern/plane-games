@@ -76,6 +76,52 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
    code: the player's mental model, each input, and how it's discovered. Read it
    before touching input code; update it when interactions change.
 
+## Pause (every real-time game)
+
+A phone interrupts you constantly, and "die or close the tab" is not an exit.
+Every game with a running clock ships the same pause: `pause.js`, copied
+unchanged into each game directory (each app stays independently installable,
+so a shared parent file would break `scope: "."`).
+
+- One call at boot: `installPause({ canPause, onPause, top, right })`. The
+  module owns the button, the card, the keys (`Esc` / `P`) and auto-pause on
+  background; `canPause()` decides when there is anything to freeze, so the
+  button never appears on a start or game-over screen.
+- **The module never owns the clock.** Each game asks `pause.active` at the top
+  of its own loop and returns before its update, resetting its own `last`/
+  `lastTs` so no time debt is banked. Skipping the draw leaves the last frame
+  on screen under the card, which is exactly what a paused game should look
+  like.
+- The card borrows the game's `--accent`, so it belongs to the game it covers.
+- Placement is per-game (`top` / `right`): the button gets out of the way of
+  whatever HUD a game already has, but stays in the same corner everywhere.
+- 2048 is the one game without it — nothing is running to freeze.
+
+## Updates (every app)
+
+Offline-first cuts both ways: the worker serves the cached copy first, so a
+shipped fix can sit on the server for days without a player ever seeing it.
+`update.js` — copied unchanged into every app directory, same reason as
+`pause.js` — makes that loop visible and puts it in the player's hands.
+
+- It **registers the service worker** (apps no longer do it inline) and checks
+  for a new one on launch.
+- One control, bottom-centre, in the app's own accent: "Check for updates"
+  normally; it promotes itself to "Update ready · Reload" when a new worker
+  has installed. Tapping it reloads. Forcing a check reports the answer —
+  including the running cache version — rather than doing nothing visible.
+- It **never reloads on its own**, and it hides while a game is in play
+  (`canShow`). A game in progress is not worth a silent refresh.
+- `mount` puts the control in the page flow instead of floating — the hub
+  scrolls, so a fixed pill would sit on a card forever.
+- "Is this an update?" means *our* worker was already in charge, compared by
+  script URL. The hub's worker has the widest scope, so opening a game from
+  the hub's cache means the hub is controlling the page while the game's own
+  worker installs underneath it — a first install, not an update.
+- Each `sw.js` answers a `'version'` message with its `CACHE` name, which is
+  what the control reports. Bumping that string per release (below) is what
+  makes an update detectable at all.
+
 ## PWA checklist (every app: hub and each game)
 
 Each directory is a fully independent, installable PWA:

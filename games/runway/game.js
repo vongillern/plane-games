@@ -1,4 +1,6 @@
+import { installPause } from './pause.js';
 import * as THREE from './vendor/three.module.js';
+import { installUpdates } from './update.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -2145,6 +2147,7 @@ let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
   if (hidden) return;
+  if (pause.active) { last = now; return; }
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.033);
@@ -2250,13 +2253,14 @@ let lastDistanceShown = -1;
 resetWorld();
 gameState = 'start';
 hud.classList.add('dim');
+const pause = installPause({
+  canPause: () => gameState === 'playing',
+  right: 80,                                  // left of the pip stack, which grows downward
+});
 requestAnimationFrame(tick);
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => gameState !== 'playing' });
 
 // ---------------------------------------------------------------------------
 // Test hooks
