@@ -11,6 +11,7 @@ subways, and dead zones. Pure static files: no build step, no frameworks, no net
 | **Drop** | Helix-jump-style 3D descent (Three.js) | `games/drop/` |
 | **Snake** | Silky-smooth modern snake | `games/snake/` |
 | **Glide** | One-tap paper-plane night flight | `games/glide/` |
+| **Carve** | Endless 3D snowboard carving (Three.js) | `games/carve/` |
 
 The hub and **each game is its own installable PWA** — visit any of them and
 "Add to Home Screen" to install just that game, or install the hub for all of them.

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en" style="background:#0a0a0f">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Carve</title>
+  <meta name="theme-color" content="#0e2422" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Carve" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud" class="hud">
+    <div id="score" class="score" aria-live="polite">0</div>
+    <div class="chip-row">
+      <div class="best-chip">BEST <span id="bestVal">0</span></div>
+    </div>
+  </div>
+
+  <button id="mute" class="mute-btn" type="button" aria-label="Toggle sound">
+    <svg class="ic-on" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="ic-off" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path d="M16 9.5l5 5m0-5-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <div id="start" class="overlay">
+    <div class="panel">
+      <h1 class="title">Carve</h1>
+      <p class="hint">
+        <span class="if-touch">drag to carve &nbsp;·&nbsp; tap to jump</span><span class="if-key">← → to carve &nbsp;·&nbsp; Space to jump</span><br>
+        <span class="hint-2"><span class="if-touch">drag while airborne to spin — land straight</span><span class="if-key">spin in the air with ← → — land straight</span></span>
+      </p>
+      <div class="cta"><span class="if-touch">tap to ride</span><span class="if-key">press Space to ride</span></div>
+      <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="panel">
+      <p class="over-label">score</p>
+      <div id="overScore" class="over-score">0</div>
+      <p class="over-best">best <span id="overBest">0</span> · <span id="overDist">0 m</span><span id="overTrick"></span></p>
+      <div class="cta"><span class="if-touch">tap to ride again</span><span class="if-key">press Space to ride again</span></div>
+    </div>
+  </div>
+
+  <div class="install-tip" id="install-tip" hidden>
+    <div class="install-tip-card">
+      <p>Install this app: tap the <strong>Share</strong> button
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      in your browser, then <strong>Add to Home Screen</strong>.</p>
+      <button id="install-tip-close" type="button">Got it</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    const btn = document.getElementById('install');
+    const tip = document.getElementById('install-tip');
+    if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    let deferred = null;
+    addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferred = e;
+      btn.hidden = false;
+    });
+    if (isIOS) btn.hidden = false;
+    for (const el of [btn, tip]) {
+      for (const t of ['pointerdown', 'pointerup', 'click']) {
+        el.addEventListener(t, (e) => e.stopPropagation());
+      }
+    }
+    btn.addEventListener('click', async () => {
+      if (deferred) {
+        deferred.prompt();
+        const { outcome } = await deferred.userChoice;
+        if (outcome === 'accepted') btn.hidden = true;
+        deferred = null;
+      } else {
+        tip.hidden = false;
+      }
+    });
+    document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
+    tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
+    addEventListener('appinstalled', () => { btn.hidden = true; });
+  })();
+  </script>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
