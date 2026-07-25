@@ -293,6 +293,20 @@ const mat4 = (x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 
   return m;
 };
 const boxPart = (w, h, d, color, m) => ({ geo: new THREE.BoxGeometry(w, h, d), color, matrix: m });
+// a capsule limb stretched between two joints — the basis of the rider pose
+function capsuleBetween(p1, p2, r, color) {
+  const a = new THREE.Vector3(...p1), b = new THREE.Vector3(...p2);
+  const len = a.distanceTo(b);
+  const geo = new THREE.CapsuleGeometry(r, len, 6, 12);
+  const q = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    b.clone().sub(a).normalize()
+  );
+  const m = new THREE.Matrix4().compose(
+    a.clone().add(b).multiplyScalar(0.5), q, new THREE.Vector3(1, 1, 1)
+  );
+  return { geo, color, matrix: m };
+}
 
 // triangular gable prism: width w (x), apex height h, depth d (z)
 function prismGeo(w, h, d) {
@@ -1027,48 +1041,63 @@ const boardMesh = new THREE.Mesh(mergeParts([
 ]), lambertVC);
 rider.add(boardMesh);
 
-const legs = new THREE.Mesh(mergeParts([
-  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 6, 14), color: 0xf05030, matrix: mat4(0, -0.2, 0.27) },
-  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 6, 14), color: 0xf05030, matrix: mat4(0, -0.2, -0.27) },
-  { geo: new THREE.SphereGeometry(0.115, 16, 12), color: 0x1c2b47, matrix: mat4(0, -0.42, 0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
-  { geo: new THREE.SphereGeometry(0.115, 16, 12), color: 0x1c2b47, matrix: mat4(0, -0.42, -0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
-]), lambertVC);
-legs.position.y = 0.62;
+// legs in a real riding stance: both knees bent toward the board's nose,
+// hips narrower than the bindings. Origin is the hip plane so the crouch
+// squash deepens the knee bend naturally.
+const legParts = [];
+for (const s of [-1, 1]) {
+  const hip = [0, 0, s * 0.13];
+  const knee = [s * 0.02, -0.24, s * 0.27 - 0.15];
+  const boot = [0, -0.44, s * 0.27];
+  legParts.push(capsuleBetween(hip, knee, 0.1, 0xf05030));
+  legParts.push(capsuleBetween(knee, boot, 0.085, 0xf05030));
+  legParts.push({ geo: new THREE.SphereGeometry(0.1, 14, 12), color: 0xf05030, matrix: mat4(...knee) });
+  legParts.push({ geo: new THREE.SphereGeometry(0.115, 16, 12), color: 0x1c2b47, matrix: mat4(boot[0], boot[1] - 0.02, boot[2], 0, 0, 0, 1.1, 0.75, 1.4) });
+}
+legParts.push({ geo: new THREE.SphereGeometry(0.155, 16, 14), color: 0xe64c2b, matrix: mat4(0, 0.02, 0, 0, 0, 0, 1.0, 0.75, 1.15) }); // pelvis
+const legs = new THREE.Mesh(mergeParts(legParts), lambertVC);
+legs.position.y = 0.6;
 rider.add(legs);
 
+// torso pivots at the hip and carries a baked forward lean (see updateRider)
 const torso = new THREE.Group();
-torso.position.y = 0.84;
+torso.position.y = 0.62;
 rider.add(torso);
 torso.add(new THREE.Mesh(mergeParts([
-  { geo: new THREE.CapsuleGeometry(0.235, 0.2, 10, 22), color: 0xff5a36, matrix: mat4(0, 0, 0, 0, 0, 0, 1.03, 1, 0.8) },
-  { geo: new THREE.CylinderGeometry(0.242, 0.25, 0.1, 22), color: 0xd94a2a, matrix: mat4(0, -0.2, 0, 0, 0, 0, 1, 1, 0.78) },
-  { geo: new THREE.CylinderGeometry(0.245, 0.245, 0.09, 22), color: 0xffd23f, matrix: mat4(0, 0.07, 0, 0, 0, 0, 1, 1, 0.78) },
+  { geo: new THREE.CapsuleGeometry(0.235, 0.16, 10, 22), color: 0xff5a36, matrix: mat4(0, 0.22, 0, 0, 0, 0, 1.05, 1, 0.85) },
+  { geo: new THREE.CylinderGeometry(0.24, 0.252, 0.1, 22), color: 0xd94a2a, matrix: mat4(0, 0.04, 0, 0, 0, 0, 1, 1, 0.82) },
+  { geo: new THREE.CylinderGeometry(0.243, 0.243, 0.09, 22), color: 0xffd23f, matrix: mat4(0, 0.28, 0, 0, 0, 0, 1, 1, 0.82) },
 ]), lambertVC));
 
-function makeArm() {
+// arms hang with a relaxed elbow bend, hands drifting slightly forward
+function makeArm(s) {
   const g = new THREE.Group();
+  const elbow = [s * 0.05, -0.17, -0.02];
+  const wrist = [s * 0.03, -0.3, -0.1];
   g.add(new THREE.Mesh(mergeParts([
-    { geo: new THREE.SphereGeometry(0.082, 14, 10), color: 0xff5a36, matrix: mat4(0, 0, 0) },
-    { geo: new THREE.CapsuleGeometry(0.072, 0.2, 6, 14), color: 0xff5a36, matrix: mat4(0, -0.16, 0) },
-    { geo: new THREE.SphereGeometry(0.092, 14, 10), color: 0x2f6bed, matrix: mat4(0, -0.33, 0) },
+    { geo: new THREE.SphereGeometry(0.085, 14, 10), color: 0xff5a36, matrix: mat4(0, 0, 0) },
+    capsuleBetween([0, 0, 0], elbow, 0.072, 0xff5a36),
+    capsuleBetween(elbow, wrist, 0.062, 0xff5a36),
+    { geo: new THREE.SphereGeometry(0.09, 14, 10), color: 0x2f6bed, matrix: mat4(...wrist) },
   ]), lambertVC));
   return g;
 }
-const armL = makeArm(), armR = makeArm();
-armL.position.set(-0.27, 0.4, 0);
-armR.position.set(0.27, 0.4, 0);
+const armL = makeArm(-1), armR = makeArm(1);
+armL.position.set(-0.27, 0.42, 0);
+armR.position.set(0.27, 0.42, 0);
 torso.add(armL, armR);
 
+// big head, counter-pitched so the face looks downhill, not at the snow
 const head = new THREE.Group();
-head.position.y = 0.58;
+head.position.set(0, 0.56, 0.02);
 torso.add(head);
 head.add(new THREE.Mesh(mergeParts([
-  { geo: new THREE.SphereGeometry(0.17, 22, 18), color: 0xf5c9a2, matrix: mat4(0, 0, 0) },
-  { geo: new THREE.CapsuleGeometry(0.05, 0.17, 6, 14), color: 0x16233c, matrix: mat4(0, 0.025, -0.145, 0, 0, Math.PI / 2, 1, 1, 0.6) },
-  { geo: new THREE.CylinderGeometry(0.178, 0.182, 0.08, 22), color: 0x2f6bed, matrix: mat4(0, 0.09, 0) },
-  { geo: new THREE.CylinderGeometry(0.168, 0.176, 0.065, 22), color: 0xffd23f, matrix: mat4(0, 0.16, 0) },
-  { geo: new THREE.SphereGeometry(0.162, 20, 16), color: 0x2f6bed, matrix: mat4(0, 0.17, 0, 0, 0, 0, 1, 0.72, 1) },
-  { geo: new THREE.SphereGeometry(0.075, 12, 10), color: 0xffffff, matrix: mat4(0, 0.31, 0) },
+  { geo: new THREE.SphereGeometry(0.19, 22, 18), color: 0xf5c9a2, matrix: mat4(0, 0, 0) },
+  { geo: new THREE.CapsuleGeometry(0.055, 0.19, 6, 14), color: 0x16233c, matrix: mat4(0, 0.03, -0.16, 0, 0, Math.PI / 2, 1, 1, 0.6) },
+  { geo: new THREE.CylinderGeometry(0.198, 0.203, 0.09, 22), color: 0x2f6bed, matrix: mat4(0, 0.1, 0) },
+  { geo: new THREE.CylinderGeometry(0.187, 0.196, 0.072, 22), color: 0xffd23f, matrix: mat4(0, 0.18, 0) },
+  { geo: new THREE.SphereGeometry(0.18, 20, 16), color: 0x2f6bed, matrix: mat4(0, 0.19, 0, 0, 0, 0, 1, 0.72, 1) },
+  { geo: new THREE.SphereGeometry(0.082, 12, 10), color: 0xffffff, matrix: mat4(0, 0.34, 0) },
 ]), lambertVC));
 
 const blobShadow = new THREE.Mesh(
@@ -1678,17 +1707,18 @@ function updateRider(dt) {
   }
 
   const cr = p.crouch;
-  legs.scale.y = 1 - cr * 0.4;
-  legs.position.y = 0.62 - cr * 0.14;
+  legs.scale.y = 1 - cr * 0.35;
+  legs.position.y = 0.6 - cr * 0.13;
   boardMesh.position.y = p.grounded ? 0 : 0.13 * cr; // board tucks up with the knees mid-air
-  torso.position.y = 0.84 - cr * 0.28;
-  torso.rotation.x = cr * 0.32;
+  torso.position.y = 0.62 - cr * 0.13;
+  torso.rotation.x = -(0.34 + cr * 0.3); // athletic forward lean, deeper in the crouch
   torso.rotation.y = -p.lean * 0.25;
+  head.rotation.x = 0.3 + cr * 0.24;     // eyes stay on the fall line
 
   const spread = p.grounded ? Math.abs(p.lean) : 0.25;
   const grab = !p.grounded ? clamp((elapsed - p.airStart) * 4, 0, 1) : 0;
-  armL.rotation.z = -(0.24 + spread * 0.8);
-  armR.rotation.z = 0.24 + spread * 0.8;
+  armL.rotation.z = -(0.18 + spread * 0.75);
+  armR.rotation.z = 0.18 + spread * 0.75;
   armL.rotation.x = grab * 0.5;
   armR.rotation.x = -grab * 1.1; // rear hand reaches for the board
   head.rotation.y = -0.28 - torso.rotation.y;
