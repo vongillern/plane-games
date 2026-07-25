@@ -1,6 +1,6 @@
-const CACHE = 'am-hub-v6';
+const CACHE = 'am-hub-v7';
 
-const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker'];
+const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker', 'carve'];
 const GAME_FILES = [
   '',
   'index.html',
@@ -22,6 +22,7 @@ const ASSETS = [
   './icon-maskable-512.png',
   './games/drop/vendor/three.module.js',
   './games/runway/vendor/three.module.js',
+  './games/carve/vendor/three.module.js',
   './games/span/physics.js',
   './games/span/levels.js',
 ];

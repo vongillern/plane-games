@@ -124,6 +124,7 @@ h1 {
   .card-hop:hover { box-shadow: 0 0 40px -10px rgba(163, 230, 53, .35); }
   .card-nova:hover { box-shadow: 0 0 40px -10px rgba(56, 189, 248, .35); }
   .card-breaker:hover { box-shadow: 0 0 40px -10px rgba(249, 115, 22, .35); }
+  .card-carve:hover { box-shadow: 0 0 40px -10px rgba(45, 212, 191, .35); }
   .card:hover .chevron { transform: translate(3px, -1px); color: var(--text); }
 }
 

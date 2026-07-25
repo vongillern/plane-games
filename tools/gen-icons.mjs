@@ -228,6 +228,24 @@ function novaLayers(t) {
     { sdf: sdCircle(t(256), t(216), t(24)), color: gradient('#bae6fd', '#38bdf8', t(232), t(192), t(280), t(240)) }, // cockpit
   ];
 }
+function carveLayers(t) {
+  // twin alpine peaks with a carved S-trail sweeping down the slope
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  const layers = [
+    { sdf: p([[36, 316], [168, 118], [252, 226], [340, 140], [476, 316]]), color: solid('#ffffff', 92) },
+    { sdf: p([[132, 172], [168, 118], [204, 172], [168, 152]]), color: solid('#ffffff', 235) },   // snow cap L
+    { sdf: p([[308, 188], [340, 140], [372, 188], [340, 168]]), color: solid('#ffffff', 235) },   // snow cap R
+  ];
+  const N = 22;
+  for (let i = 0; i < N; i++) {
+    const k = i / (N - 1);
+    const x = 256 + Math.sin(k * 3.6 - 0.35) * (30 + 120 * k);
+    const y = 158 + k * 274;
+    const r = 6 + 21 * k;
+    layers.push({ sdf: sdCircle(t(x), t(y), t(r)), color: solid('#ffffff', 225) });
+  }
+  return layers;
+}
 function breakerLayers(t) {
   // brick rows above, ball mid-flight, paddle below
   const brick = (cx, cy, a) => ({ sdf: sdRoundRect(t(cx), t(cy), t(52), t(21), t(12)), color: solid('#ffffff', a) });
@@ -269,6 +287,9 @@ const APPS = [
   },
   {
     dir: 'games/breaker', bg0: '#57150d', bg1: '#f97316', art: breakerLayers,
+  },
+  {
+    dir: 'games/carve', bg0: '#0b3f38', bg1: '#2dd4bf', art: carveLayers,
   },
 ];
 
