@@ -1,4 +1,5 @@
 import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 // Nova — a vertical galaxy shooter.
 // Airplane Mode collection. Fully offline, canvas 2D.
 // Autofiring lasers, alien formations that vary by level, glowing power-ups,
@@ -1105,11 +1106,8 @@ requestAnimationFrame(frame);
 // ---------------------------------------------------------------------------
 // Service worker
 // ---------------------------------------------------------------------------
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== 'playing' });
 
 // ---------------------------------------------------------------------------
 // Install prompt

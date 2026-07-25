@@ -1,9 +1,10 @@
-const CACHE = 'am-carve-v6';
+const CACHE = 'am-carve-v7';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './update.js',
   './pause.js',
   './manifest.webmanifest',
   './vendor/three.module.js',
@@ -38,4 +39,11 @@ self.addEventListener('fetch', (e) => {
       }).catch(() => hit);
     })
   );
+});
+
+// the page asks what build it is running (see update.js)
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) {
+    e.source.postMessage({ type: 'version', version: CACHE });
+  }
 });

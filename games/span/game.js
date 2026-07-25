@@ -1,4 +1,5 @@
 import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 // Span — a bridge builder. Offline PWA, vanilla ES module.
 // Build with drags, test with deterministic Verlet physics (see physics.js).
 
@@ -1171,6 +1172,5 @@ const pause = installPause({
 });
 requestAnimationFrame((t) => { lastTs = t; requestAnimationFrame(frame); });
 
-if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => screen === 'menu' });

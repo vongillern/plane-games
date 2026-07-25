@@ -141,9 +141,6 @@
 </div>
 
 <script>
-if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
-}
 
 (() => {
   const btn = document.getElementById('install');
@@ -177,6 +174,12 @@ if ('serviceWorker' in navigator) {
   tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
   addEventListener('appinstalled', () => { btn.hidden = true; });
 })();
+</script>
+<script type="module">
+  // registers the service worker and owns the update prompt for the hub
+  import { installUpdates } from './update.js';
+  // the hub scrolls, so the control lives in the footer rather than floating
+  installUpdates({ mount: document.querySelector('footer') });
 </script>
 </body>
 </html>

@@ -18,6 +18,9 @@ globally and instantly.
 - **Overlay backdrop tap** → primary action (game over: new game; win: keep
   going). Buttons also present, 44px.
 - Keyboard: arrows / WASD.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Motion model
 All tile motion is choreographed in JS (Web Animations API) from the single

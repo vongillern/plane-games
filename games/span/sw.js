@@ -1,10 +1,11 @@
-const CACHE = 'am-span-v3';
+const CACHE = 'am-span-v4';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './update.js',
   './pause.js',
   './physics.js',
   './levels.js',
@@ -51,4 +52,11 @@ self.addEventListener('fetch', (event) => {
         .catch(() => caches.match('./index.html'));
     })
   );
+});
+
+// the page asks what build it is running (see update.js)
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) {
+    e.source.postMessage({ type: 'version', version: CACHE });
+  }
 });

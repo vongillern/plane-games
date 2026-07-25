@@ -1,5 +1,6 @@
 import { installPause } from './pause.js';
 import * as THREE from './vendor/three.module.js';
+import { installUpdates } from './update.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -2258,11 +2259,8 @@ const pause = installPause({
 });
 requestAnimationFrame(tick);
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => gameState !== 'playing' });
 
 // ---------------------------------------------------------------------------
 // Test hooks

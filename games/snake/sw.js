@@ -1,10 +1,11 @@
-const CACHE = 'am-snake-v4';
+const CACHE = 'am-snake-v5';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './update.js',
   './pause.js',
   './manifest.webmanifest',
   './icon-192.png',
@@ -49,4 +50,11 @@ self.addEventListener('fetch', (event) => {
         .catch(() => caches.match('./index.html'));
     })
   );
+});
+
+// the page asks what build it is running (see update.js)
+self.addEventListener('message', (e) => {
+  if (e.data === 'version' && e.source) {
+    e.source.postMessage({ type: 'version', version: CACHE });
+  }
 });

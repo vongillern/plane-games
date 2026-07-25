@@ -1,4 +1,5 @@
 import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 // Snake — offline PWA. Vanilla ES module.
 // The differentiator: the snake steps on a fixed grid timer but every frame
 // interpolates between grid cells, so the body glides as one continuous ribbon.
@@ -508,8 +509,5 @@ const pause = installPause({ canPause: () => state === 'playing' });
 requestAnimationFrame(frame);
 
 // ---- Service worker -------------------------------------------------------
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== 'playing' });

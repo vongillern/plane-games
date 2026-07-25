@@ -21,6 +21,9 @@ the player asks constantly: *am I big enough for that yet?*
 - **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
   card anywhere to resume; backgrounding the app pauses too. Shared
   behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
+- **Check for updates** → the pill at the bottom. It says *Update ready ·
+  Reload* on launch when a new build is waiting; tapping reloads into it.
+  Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Clamp, don't reject
 - Dragging past 90px does nothing extra rather than accelerating away or

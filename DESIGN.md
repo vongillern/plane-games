@@ -97,6 +97,31 @@ so a shared parent file would break `scope: "."`).
   whatever HUD a game already has, but stays in the same corner everywhere.
 - 2048 is the one game without it — nothing is running to freeze.
 
+## Updates (every app)
+
+Offline-first cuts both ways: the worker serves the cached copy first, so a
+shipped fix can sit on the server for days without a player ever seeing it.
+`update.js` — copied unchanged into every app directory, same reason as
+`pause.js` — makes that loop visible and puts it in the player's hands.
+
+- It **registers the service worker** (apps no longer do it inline) and checks
+  for a new one on launch.
+- One control, bottom-centre, in the app's own accent: "Check for updates"
+  normally; it promotes itself to "Update ready · Reload" when a new worker
+  has installed. Tapping it reloads. Forcing a check reports the answer —
+  including the running cache version — rather than doing nothing visible.
+- It **never reloads on its own**, and it hides while a game is in play
+  (`canShow`). A game in progress is not worth a silent refresh.
+- `mount` puts the control in the page flow instead of floating — the hub
+  scrolls, so a fixed pill would sit on a card forever.
+- "Is this an update?" means *our* worker was already in charge, compared by
+  script URL. The hub's worker has the widest scope, so opening a game from
+  the hub's cache means the hub is controlling the page while the game's own
+  worker installs underneath it — a first install, not an update.
+- Each `sw.js` answers a `'version'` message with its `CACHE` name, which is
+  what the control reports. Bumping that string per release (below) is what
+  makes an update detectable at all.
+
 ## PWA checklist (every app: hub and each game)
 
 Each directory is a fully independent, installable PWA:

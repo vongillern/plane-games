@@ -1,4 +1,5 @@
 import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 // Breaker — a polished brick-breaker. Airplane Mode collection.
 // Fully offline, canvas 2D. Sub-stepped swept physics so the ball never
 // tunnels through bricks or the paddle; every glow is pre-rendered to a
@@ -1126,11 +1127,8 @@ requestAnimationFrame(frame);
 // ---------------------------------------------------------------------------
 // Service worker
 // ---------------------------------------------------------------------------
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== 'playing' && state !== 'serve' });
 
 // ---------------------------------------------------------------------------
 // Install prompt

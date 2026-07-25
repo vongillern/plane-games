@@ -1,3 +1,4 @@
+import { installUpdates } from './update.js';
 // 2048 — offline PWA. Vanilla ES module.
 
 const SIZE = 4;
@@ -808,11 +809,8 @@ window.__test = {
 };
 
 // ---- Service worker -------------------------------------------------------
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
-  });
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates();
 
 // ---- Install prompt ---------------------------------------------------
 (() => {

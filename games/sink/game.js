@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three.module.js';
 import { installPause } from './pause.js';
+import { installUpdates } from './update.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -2319,7 +2320,6 @@ window.__sink = {
   place(x, z) { player.x = x; player.z = z; player.vx = player.vz = 0; camTarget.set(x, 0, z); },
 };
 
-if ('serviceWorker' in navigator) {
-  addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-}
+// update.js registers the service worker and owns the update prompt
+installUpdates({ canShow: () => state !== 'playing' });
 
