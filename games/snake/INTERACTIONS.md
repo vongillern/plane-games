@@ -13,6 +13,9 @@ their own tail is the hazard they created.
   turn (one gesture does both — no wasted input).
 - **Tap on Dead** → restart.
 - Keyboard: arrows / WASD, Space/Enter/R for start/restart.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
 
 ## Discoverability
 - Start overlay: "swipe to steer" + pulsing "tap to start".

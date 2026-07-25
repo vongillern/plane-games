@@ -18,6 +18,9 @@ the player asks constantly: *am I big enough for that yet?*
   restart, R restarts immediately, M mutes.
 - The stick renders for mouse drags too — on desktop the hint reads
   "WASD or arrows", but dragging works and shows the same ring.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
 
 ## Clamp, don't reject
 - Dragging past 90px does nothing extra rather than accelerating away or
@@ -43,16 +46,30 @@ the player asks constantly: *am I big enough for that yet?*
 - Growth is area-true: swallowing adds area, and the radius is
   `sqrt(area / PI)`. Early swallows change your size a lot, late ones
   barely — the same curve as the objects you can reach.
-- Speed rises gently with size (`r ^ 0.28`) while the camera pulls back
-  faster, so a big hole reads as weighty without ever feeling sluggish.
+- **Bigger is slower.** Speed falls with size (`r ^ -0.34`, floored at 52%
+  of base) and a big hole takes longer to change course. Growth buys reach
+  and menu, never pace — so a late lead has to be steered, and a small hole
+  can always outrun a big one. It is the trade the whole match is built on.
 - **Holes eat holes.** Any hole 15% bigger than another swallows it
-  whole, taking 55% of its area. That applies to you in both directions.
+  whole, taking 55% of its area. The player is given a wider margin: a
+  rival needs to be 45% bigger to take *you*. The house tilts the table
+  your way, quietly.
 - Being swallowed is a setback, not an elimination: you respawn 2.5s
   later at ~35% of your area, elsewhere on the map. The match always runs
   its full 120 seconds.
-- Rivals hunt. They pick the best value-per-distance target they can
-  actually fit, and switch to a smaller hole — including yours — when one
-  is in range. They are not on rails.
+- Rivals hunt, but they are opponents with a plan, not solvers. They run
+  at 60–78% of full speed, re-appraise every ~1–2s (not twice a second),
+  judge targets with a wide jitter, bank 18% less area per bite than you,
+  mooch for a beat about a third of the time, and never chase a hole fast
+  enough to outrun them. They are still not on rails — they are just
+  beatable.
+- **Blockers dissolve.** Anything standing between the camera and your
+  hole — a tower, a bus — fades to a dither until it is out of the way, so
+  the pit is never hidden by the city. It is a screen-door fade, not
+  blending: the props stay in the opaque pass and never need sorting.
+- Falling is a topple, not a drop. A thing overbalances on the rim, tips
+  over it, then spirals down the shaft, reflecting off the wall on the
+  way. Small props whip over; a tower groans.
 - Attract mode: on the start screen the rivals eat the city behind the
   panel while the camera orbits. Starting a match regenerates the world,
   so the demo never eats into your run.

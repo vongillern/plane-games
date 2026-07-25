@@ -1,9 +1,10 @@
-const CACHE = 'am-drop-v4';
+const CACHE = 'am-drop-v5';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './pause.js',
   './manifest.webmanifest',
   './vendor/three.module.js',
   './icon-192.png',

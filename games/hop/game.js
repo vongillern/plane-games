@@ -1,3 +1,4 @@
+import { installPause } from './pause.js';
 // Hop — a doodle-jump-style vertical bouncer.
 // Airplane Mode collection. Fully offline, canvas 2D.
 // The hook: the whole world's palette + atmosphere shifts continuously with
@@ -1035,6 +1036,7 @@ let lastTs = null;
 function frame(ts) {
   requestAnimationFrame(frame);
   if (document.hidden) { lastTs = null; return; }
+  if (pause.active) { lastTs = null; return; }
   if (lastTs == null) lastTs = ts;
   let dt = (ts - lastTs) / 1000;
   lastTs = ts;
@@ -1050,6 +1052,7 @@ function frame(ts) {
 best = loadBest();
 resize();
 reset();
+const pause = installPause({ canPause: () => state === 'playing' });
 requestAnimationFrame(frame);
 
 // ---------------------------------------------------------------------------

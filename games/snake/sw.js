@@ -1,10 +1,11 @@
-const CACHE = 'am-snake-v3';
+const CACHE = 'am-snake-v4';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './pause.js',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png',

@@ -1,3 +1,4 @@
+import { installPause } from './pause.js';
 // Glide — a night-flight paper plane game.
 // Airplane Mode collection. Fully offline, canvas 2D.
 
@@ -618,6 +619,7 @@ let lastT = performance.now();
 function frame(now) {
   let dt = (now - lastT) / 1000;
   lastT = now;
+  if (pause.active) { requestAnimationFrame(frame); return; }
   if (document.hidden) {
     requestAnimationFrame(frame);
     return;
@@ -638,4 +640,5 @@ window.addEventListener('resize', resize);
 resize();
 bestScoreEl.textContent = String(best);
 plane.y = H * 0.46;
+const pause = installPause({ canPause: () => state === PLAYING });
 requestAnimationFrame(frame);

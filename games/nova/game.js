@@ -1,3 +1,4 @@
+import { installPause } from './pause.js';
 // Nova — a vertical galaxy shooter.
 // Airplane Mode collection. Fully offline, canvas 2D.
 // Autofiring lasers, alien formations that vary by level, glowing power-ups,
@@ -1079,6 +1080,7 @@ let lastTs = null;
 function frame(ts) {
   requestAnimationFrame(frame);
   if (document.hidden) { lastTs = null; return; }
+  if (pause.active) { lastTs = null; return; }
   if (lastTs == null) lastTs = ts;
   let dt = (ts - lastTs) / 1000;
   lastTs = ts;
@@ -1094,6 +1096,10 @@ function frame(ts) {
 best = loadBest();
 resize();
 reset();
+const pause = installPause({
+  canPause: () => state === 'playing',
+  top: 62,                                    // below the lives row
+});
 requestAnimationFrame(frame);
 
 // ---------------------------------------------------------------------------

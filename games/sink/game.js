@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import { installPause } from './pause.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -21,9 +22,14 @@ const TIP_BITE = 0.25;             // rim must pass this far under the footprint
 const SHAFT_DEPTH = 26;
 const G = 30;                      // gravity for the fall (m/s²) — arcade-heavy
 
-const BASE_SPEED = 11;             // m/s at START_R
-const SPEED_GROW = 0.28;           // speed *= (r / START_R) ^ SPEED_GROW
+// A hole is a mass, not a cursor: it starts nimble and gets heavy. Growth
+// buys reach and menu, never pace — so a late lead has to be steered, and a
+// small hole can always outrun a big one.
+const BASE_SPEED = 12.5;           // m/s at START_R
+const SPEED_FALL = 0.34;           // speed *= (r / START_R) ^ -SPEED_FALL
+const SPEED_FLOOR = 0.52;          // ...but never below this fraction of base
 const ACCEL = 9;                   // damp rate toward the commanded velocity
+const ACCEL_HEAVY = 0.55;          // big holes also take longer to change course
 
 const STICK_MAX = 90;              // px of drag for full tilt
 const STICK_DEAD = 6;
@@ -38,8 +44,24 @@ const CAM_R_FAR = 17;              // hole radius at which the camera is fully o
 const FOV = 55;
 
 const EAT_HOLE_RATIO = 1.15;       // how much bigger you must be to swallow a rival
+const EAT_PLAYER_RATIO = 1.45;     // ...and how much bigger a rival must be to take
+                                   // you: the house tilts the table your way
 const EAT_HOLE_REACH = 0.75;       // ...and how close, as a fraction of your radius
 const RESPAWN_DELAY = 2.5;
+
+// Rival handicaps. They should feel like opponents with a plan, not solvers:
+// slower, slower to decide, and they bank less from every bite.
+const RIVAL_SKILL = [0.60, 0.78];  // fraction of full speed they command
+const RIVAL_GROWTH = 0.82;         // area they bank per prop, vs the player's 1.0
+const RIVAL_THINK = [0.9, 1.9];    // seconds between re-appraisals (÷ skill)
+const RIVAL_DAWDLE = 0.34;         // chance a re-appraisal turns into a wander
+const RIVAL_REACH = 13;            // + drawR * 5.5 — how far they look for prey
+
+// See-through blockers: anything standing between the camera and your hole
+// dissolves to this much of itself, so the pit is never hidden by a tower.
+const FADE_MIN = 0.24;
+const FADE_RATE = 9;               // how fast a blocker fades in / back out
+const FADE_MIN_H = 1.6;            // props shorter than this never occlude
 
 const BEST_KEY = 'am.sink.best';
 const MUTE_KEY = 'am.sink.muted';
@@ -807,7 +829,29 @@ function makeHoleVisual(colorHex) {
 const world = new THREE.Group();
 scene.add(world);
 
+// Props carry a per-instance fade so anything standing between the camera and
+// your hole can dissolve out of the way. It is *dithered*, not blended: the
+// material stays in the opaque pass, keeps writing depth, and needs no
+// sorting — a transparent instanced mesh would have to pick one draw order for
+// a thousand buildings and get it wrong for most of them.
 const PROP_MAT = new THREE.MeshLambertMaterial({ vertexColors: true });
+PROP_MAT.onBeforeCompile = (shader) => {
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', `#include <common>
+      attribute float aFade;
+      varying float vFade;`)
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\n  vFade = aFade;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+      varying float vFade;
+      // interleaved gradient noise: a fine, non-repeating screen-door pattern
+      float sinkDither(vec2 p) {
+        return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y));
+      }`)
+    .replace('#include <map_fragment>', `
+      if (vFade < 0.995 && sinkDither(gl_FragCoord.xy) > vFade) discard;
+      #include <map_fragment>`);
+};
 const VARIANTS = { person: 3, car: 3, van: 2, tree: 3, bush: 3, block: 3, tower: 2 };
 
 let mapDef = null;
@@ -873,6 +917,7 @@ function disposeWorld() {
   objs.length = 0;
   falling.length = 0;
   wobbling.length = 0;
+  fading.clear();
   for (const k of Object.keys(meshesByKind)) delete meshesByKind[k];
 }
 
@@ -938,12 +983,20 @@ function buildWorld(def) {
     const spec = SPECS[k];
     const nv = VARIANTS[k] || 1;
     const meshes = [];
+    const heights = [];
     for (let v = 0; v < nv; v++) {
       const geo = archetypes[k]();
-      const m = new THREE.InstancedMesh(geo, PROP_MAT, Math.ceil(want / nv) + 8);
+      const cap = Math.ceil(want / nv) + 8;
+      const m = new THREE.InstancedMesh(geo, PROP_MAT, cap);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.frustumCulled = false;
       m.count = 0;
+      // every geometry drawn with PROP_MAT must carry aFade — a missing
+      // attribute reads as 0 in GLSL, which would dither the prop away entirely
+      const fades = new Float32Array(cap).fill(1);
+      geo.setAttribute('aFade', new THREE.InstancedBufferAttribute(fades, 1));
+      geo.computeBoundingBox();
+      heights.push(geo.boundingBox.max.y);
       world.add(m);
       disposables.push(m);
       meshes.push(m);
@@ -982,9 +1035,12 @@ function buildWorld(def) {
       const idx = mesh.count++;
       const o = {
         k, x, z, y: 0, r, s, rotY, mesh, idx,
+        h: heights[mi] * s,
         growth: spec.growth * s * s,
         pts: Math.round(spec.pts * s * s),
         state: 0, vy: 0, vx: 0, vz: 0, tiltX: 0, tiltZ: 0, spin: 0, wob: 0,
+        tilt: 0, av: 0, tipping: 0, tipRate: 0, axX: 0, axZ: 0, swirl: 0,
+        fade: 1, fadeT: 1, fmark: -1,
         fscale: 1, hole: null,
       };
       objs.push(o);
@@ -1067,14 +1123,16 @@ const holes = [];
 let player = null;
 let tNow = 0;
 
-const speedFor = (r) => BASE_SPEED * Math.pow(r / START_R, SPEED_GROW);
+// Bigger is slower — the core trade the whole match is built on.
+const speedFor = (r) => BASE_SPEED * clamp(Math.pow(r / START_R, -SPEED_FALL), SPEED_FLOOR, 1);
+const accelFor = (r) => ACCEL * lerp(1, ACCEL_HEAVY, clamp((r - START_R) / 9, 0, 1));
 
 function makeHole(name, color, isPlayer) {
   const h = {
     name, color, isPlayer,
     x: 0, z: 0, area: START_AREA, drawR: START_R, targetR: START_R,
     vx: 0, vz: 0, score: 0, alive: true, dead: 0, skill: 1,
-    target: null, retarget: 0, wobble: rand(0, TAU),
+    target: null, retarget: 0, dawdle: 0, wobble: rand(0, TAU),
     vis: makeHoleVisual(color),
   };
   scene.add(h.vis);
@@ -1108,8 +1166,9 @@ function placeHole(h, awayFromOthers) {
 
 function stepHole(h, dt, dirX, dirZ) {
   const sp = speedFor(h.drawR);
-  h.vx = damp(h.vx, dirX * sp, ACCEL, dt);
-  h.vz = damp(h.vz, dirZ * sp, ACCEL, dt);
+  const k = accelFor(h.drawR);
+  h.vx = damp(h.vx, dirX * sp, k, dt);
+  h.vz = damp(h.vz, dirZ * sp, k, dt);
   h.x += h.vx * dt;
   h.z += h.vz * dt;
   const lim = HALF - h.drawR - 0.5;
@@ -1168,21 +1227,53 @@ function removeFromGrid(o) {
   }
 }
 
+// A thing does not drop the moment the rim reaches it: it overbalances, tips
+// over the edge, *then* falls — and once it's in the shaft it spirals down the
+// wall rather than sliding down a drainpipe. Everything below is scaled by the
+// prop's size, so a bench whips over and a tower groans.
 function startFall(o, h) {
   o.state = 1;
   o.hole = h;
   const dx = h.x - o.x, dz = h.z - o.z;
   const d = Math.max(0.001, Math.hypot(dx, dz));
-  o.vx = (dx / d) * rand(1.4, 3.0);
-  o.vz = (dz / d) * rand(1.4, 3.0);
+  const nx = dx / d, nz = dz / d;
+
+  // heavy things carry their weight into the pit; light things get flung
+  const heft = clamp(o.r / 3.2, 0.12, 1);
+  const kick = lerp(3.4, 1.1, heft);
+  // inherit a share of the hole's own motion — being swallowed by a moving
+  // hole should throw you the way it's travelling
+  o.vx = nx * kick * rand(0.7, 1.15) + h.vx * 0.3;
+  o.vz = nz * kick * rand(0.7, 1.15) + h.vz * 0.3;
   o.vy = 0;
-  o.spin = rand(-7, 7) * (o.r > 3 ? 0.3 : 1);
+
+  // tangential kick: which way it swirls depends on which side of centre it
+  // went in, so the shaft reads as a funnel and not a chute
+  const side = Math.sign(-nz * (o.x - h.x) + nx * (o.z - h.z)) || (Math.random() < 0.5 ? -1 : 1);
+  o.swirl = side * lerp(3.2, 1.0, heft) * rand(0.6, 1.2);
+
+  // it pivots about the rim: axis is horizontal, perpendicular to the fall
+  o.axX = nx;
+  o.axZ = nz;
+  o.tilt = 0;
+  o.tipRate = lerp(15, 3.4, heft) * rand(0.85, 1.15);   // rad/s² over the edge
+  o.av = 0;
+  o.tipping = 1;
+  o.spin = rand(-1, 1) * lerp(4.5, 0.9, heft);          // yaw tumble
   o.fscale = 1;
+  // a blocker that gets swallowed must go back to solid on the way down —
+  // nothing should tumble into the pit half-dithered
+  if (o.fade !== 1) {
+    o.fade = 1;
+    o.fadeT = 1;
+    fading.delete(o);
+    writeFade(o);
+  }
   removeFromGrid(o);
   falling.push(o);
 
   h.score += o.pts;
-  growHole(h, o.growth);
+  growHole(h, o.growth * (h.isPlayer ? 1 : RIVAL_GROWTH));
   puff(o.x, o.z, o.r);
   if (h.isPlayer) onPlayerEat(o);
 }
@@ -1191,28 +1282,60 @@ function updateFalling(dt) {
   for (let i = falling.length - 1; i >= 0; i--) {
     const o = falling[i];
     const h = o.hole;
-    o.vy -= G * dt;
+
+    if (o.tipping) {
+      // still pivoting on the rim: the centre of mass swings out and down, so
+      // it only picks up a fraction of gravity until it's past the balance point
+      o.av += o.tipRate * dt;
+      o.tilt += o.av * dt;
+      o.vy -= G * 0.3 * dt;
+      if (o.tilt > 1.25) o.tipping = 0;
+    } else {
+      o.vy -= G * dt;
+      o.tilt += o.av * dt;
+      o.av *= 1 - 0.6 * dt;            // air drag on the tumble
+    }
+
+    // the funnel pulls harder the deeper you are, and spins you as it does
     const dx = h.x - o.x, dz = h.z - o.z;
     const d = Math.max(0.001, Math.hypot(dx, dz));
-    const pull = 16 * dt;
+    const depth = clamp(-o.y / SHAFT_DEPTH, 0, 1);
+    const pull = (12 + depth * 26) * dt;
     o.vx += (dx / d) * pull;
     o.vz += (dz / d) * pull;
+    // swirl acts along the tangent and bleeds off as it descends
+    const tx = -dz / d, tz = dx / d;
+    o.vx += tx * o.swirl * dt * 6;
+    o.vz += tz * o.swirl * dt * 6;
+    o.swirl *= 1 - 1.1 * dt;
+
     o.x += o.vx * dt;
     o.z += o.vz * dt;
     o.y += o.vy * dt;
-    o.tiltX += o.spin * dt;
-    o.tiltZ += o.spin * 0.55 * dt;
 
-    // ride the shaft wall in instead of clipping through it
+    // ride the shaft wall in instead of clipping through it: reflect only the
+    // radial part of the velocity so the object keeps orbiting on the way down
     const wall = Math.max(0.15, h.drawR * (1 + (o.y / SHAFT_DEPTH) * 0.28) - o.r * 0.45);
     const dd = Math.hypot(o.x - h.x, o.z - h.z);
     if (dd > wall) {
-      const s = wall / dd;
-      o.x = h.x + (o.x - h.x) * s;
-      o.z = h.z + (o.z - h.z) * s;
-      o.vx *= 0.35;
-      o.vz *= 0.35;
+      const ux = (o.x - h.x) / dd, uz = (o.z - h.z) / dd;
+      o.x = h.x + ux * wall;
+      o.z = h.z + uz * wall;
+      const vr = o.vx * ux + o.vz * uz;
+      if (vr > 0) {
+        o.vx -= vr * 1.35 * ux;        // 0.35 restitution off the dirt
+        o.vz -= vr * 1.35 * uz;
+        o.av += vr * 0.35 * (Math.random() < 0.5 ? -1 : 1);  // scraping torque
+      }
+      o.vx *= 0.97;                    // wall friction, tangential only
+      o.vz *= 0.97;
     }
+
+    // pivoting toward the hole: rotate about the axis perpendicular to the fall
+    o.tiltX = o.axZ * o.tilt;
+    o.tiltZ = -o.axX * o.tilt;
+    o.rotY += o.spin * dt;
+
     o.fscale = clamp(1 + (o.y + 8) / 20, 0.04, 1);
 
     if (o.y < -SHAFT_DEPTH * 0.72) {
@@ -1244,6 +1367,79 @@ function updateWobble(dt) {
     o.tiltX = a;
     o.tiltZ = a * 0.6;
     writeMatrix(o);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// See-through blockers
+// ---------------------------------------------------------------------------
+// Anything standing on the line between the camera and your hole dissolves
+// until it is out of the way. Only the player's view is worth protecting, so
+// this walks a thin tube along one ray — a few dozen distance tests a frame.
+const fading = new Set();
+let fadeStamp = 0;
+
+function writeFade(o) {
+  const a = o.mesh.geometry.attributes.aFade;
+  a.array[o.idx] = o.fade;
+  a.needsUpdate = true;
+}
+
+function markOccluders(h) {
+  fadeStamp++;
+  const cx0 = camera.position.x, cy0 = camera.position.y, cz0 = camera.position.z;
+  let dx = h.x - cx0, dy = -cy0, dz = h.z - cz0;
+  const len = Math.hypot(dx, dy, dz) || 1;
+  dx /= len; dy /= len; dz /= len;
+  // the tube has to cover the whole opening, not just its centre
+  const tube = h.drawR * 1.1 + 1.8;
+  const span = Math.ceil((tube + 8) / CELL);
+  const steps = 7;
+  for (let s = 1; s <= steps; s++) {
+    const t = (s / (steps + 1)) * len;
+    const sx = cx0 + dx * t, sz = cz0 + dz * t;
+    const gx = Math.floor((sx + HALF) / CELL) + 1;
+    const gz = Math.floor((sz + HALF) / CELL) + 1;
+    for (let j = gz - span; j <= gz + span; j++) {
+      if (j < 0 || j >= GRID_N) continue;
+      for (let i = gx - span; i <= gx + span; i++) {
+        if (i < 0 || i >= GRID_N) continue;
+        const bucket = grid[j * GRID_N + i];
+        for (let k = 0; k < bucket.length; k++) {
+          const o = bucket[k];
+          if (o.state !== 0 || o.h < FADE_MIN_H || o.fmark === fadeStamp) continue;
+          // closest approach of the ray to the prop's vertical axis, sampled
+          // at three heights — a tower's base can be clear while its top is not
+          let near = 1e9, proj = 0;
+          for (let q = 0; q < 3; q++) {
+            const py = o.h * (0.15 + q * 0.35);
+            const ox = o.x - cx0, oy = py - cy0, oz = o.z - cz0;
+            const p = ox * dx + oy * dy + oz * dz;
+            const ex = ox - dx * p, ey = oy - dy * p, ez = oz - dz * p;
+            const e = Math.hypot(ex, ey, ez);
+            if (e < near) { near = e; proj = p; }
+          }
+          // must actually be between the camera and the hole
+          if (proj < 2 || proj > len - h.drawR * 0.5) continue;
+          if (near > tube + o.r * 0.8) continue;
+          o.fadeT = FADE_MIN;
+          o.fmark = fadeStamp;
+          fading.add(o);
+        }
+      }
+    }
+  }
+}
+
+function updateFades(dt) {
+  for (const o of fading) {
+    if (o.fmark !== fadeStamp) o.fadeT = 1;
+    o.fade = damp(o.fade, o.fadeT, FADE_RATE, dt);
+    if (o.fadeT >= 1 && o.fade > 0.995) {
+      o.fade = 1;
+      fading.delete(o);
+    }
+    writeFade(o);
   }
 }
 
@@ -1343,8 +1539,12 @@ function updateDust(dt) {
 // ---------------------------------------------------------------------------
 // Rival AI — cheap, but it hunts
 // ---------------------------------------------------------------------------
+// how much bigger `a` has to be before it may swallow `b` — the player is
+// given a wider margin than the rivals grant each other
+const eatRatioFor = (b) => (b.isPlayer ? EAT_PLAYER_RATIO : EAT_HOLE_RATIO);
+
 function pickTarget(h) {
-  const reach = 16 + h.drawR * 7;
+  const reach = RIVAL_REACH + h.drawR * 5.5;
   const span = Math.ceil(reach / CELL);
   const cx = Math.floor((h.x + HALF) / CELL) + 1;
   const cz = Math.floor((h.z + HALF) / CELL) + 1;
@@ -1359,20 +1559,23 @@ function pickTarget(h) {
         const o = bucket[k];
         if (o.state !== 0 || o.r > eatable) continue;
         const d = Math.hypot(o.x - h.x, o.z - h.z);
-        // jitter the appraisal so rivals make human-ish choices instead of
-        // perfectly solving the map every time they re-target
-        const s = (o.pts / (d + 6)) * rand(0.7, 1.3);
+        // jitter the appraisal hard, so rivals make human-ish choices instead
+        // of perfectly solving the map every time they re-target
+        const s = (o.pts / (d + 6)) * rand(0.45, 1.55);
         if (s > bestScore) { bestScore = s; bestT = o; }
       }
     }
   }
-  // a rival worth eating beats any pile of benches
+  // a rival worth eating beats any pile of benches — but only one it can
+  // actually catch, and only if it happens to notice
   for (const o of holes) {
     if (o === h || !o.alive) continue;
-    if (h.drawR < o.drawR * EAT_HOLE_RATIO * 1.08) continue;
+    if (h.drawR < o.drawR * eatRatioFor(o) * 1.12) continue;
     const d = Math.hypot(o.x - h.x, o.z - h.z);
-    if (d > 70) continue;
-    const s = (o.area * 26 + 300) / (d + 8);
+    if (d > 52) continue;
+    // a hole that outruns you is not worth chasing
+    if (speedFor(o.drawR) > speedFor(h.drawR) * h.skill * 0.98) continue;
+    const s = (o.area * 18 + 220) / (d + 8) * rand(0.6, 1.2);
     if (s > bestScore) { bestScore = s; bestT = o; }
   }
   return bestT;
@@ -1380,11 +1583,14 @@ function pickTarget(h) {
 
 function updateAI(h, dt) {
   h.retarget -= dt;
+  if (h.dawdle > 0) h.dawdle -= dt;
   const lost = !h.target || (h.target.state !== undefined && h.target.state !== 0) ||
     (h.target.alive === false);
   if (h.retarget <= 0 || lost) {
-    h.retarget = rand(0.45, 1.0) / h.skill;
+    h.retarget = rand(RIVAL_THINK[0], RIVAL_THINK[1]) / h.skill;
     h.target = pickTarget(h);
+    // every so often a rival simply mooches for a beat instead of committing
+    if (Math.random() < RIVAL_DAWDLE) h.dawdle = rand(0.35, 1.1);
   }
   let tx, tz;
   if (h.target) {
@@ -1396,8 +1602,9 @@ function updateAI(h, dt) {
     tz = rand(-40, 40);
   }
   h.wobble += dt * 1.6;
-  const a = Math.atan2(tz - h.z, tx - h.x) + Math.sin(h.wobble) * 0.22;
-  stepHole(h, dt, Math.cos(a) * h.skill, Math.sin(a) * h.skill);
+  const throttle = h.skill * (h.dawdle > 0 ? 0.45 : 1);
+  const a = Math.atan2(tz - h.z, tx - h.x) + Math.sin(h.wobble) * 0.3;
+  stepHole(h, dt, Math.cos(a) * throttle, Math.sin(a) * throttle);
 }
 
 function holeVsHole() {
@@ -1405,7 +1612,7 @@ function holeVsHole() {
     if (!a.alive) continue;
     for (const b of holes) {
       if (a === b || !b.alive) continue;
-      if (a.drawR < b.drawR * EAT_HOLE_RATIO) continue;
+      if (a.drawR < b.drawR * eatRatioFor(b)) continue;
       const d = Math.hypot(a.x - b.x, a.z - b.z);
       if (d > a.drawR * EAT_HOLE_REACH) continue;
       swallowHole(a, b);
@@ -1726,7 +1933,7 @@ function setupHoles() {
     const h = makeHole(names[i], colors[i], false);
     // rivals cap out below the player's top speed: they never waste a metre,
     // so matching their speed too would make them unbeatable
-    h.skill = rand(0.78, 0.94);
+    h.skill = rand(RIVAL_SKILL[0], RIVAL_SKILL[1]);
     holes.push(h);
   }
   for (const h of holes) placeHole(h, true);
@@ -1988,6 +2195,7 @@ function updateHoles(dt, playerDriven) {
 function updatePlaying(dt) {
   timeLeft -= dt;
   updateHoles(dt, true);
+  if (player.alive) markOccluders(player);
   setScore(player.score);
   setSize(player.drawR);
   setTime(timeLeft);
@@ -2060,6 +2268,7 @@ let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
   if (hidden) return;
+  if (pause.active) { last = now; return; }
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.033);      // clamp to avoid teleporting after a tab switch
@@ -2080,10 +2289,17 @@ function tick(now) {
 
   updateFalling(dt);
   updateWobble(dt);
+  updateFades(dt);
   updateDust(dt);
 
   renderer.render(scene, camera);
 }
+const pause = installPause({
+  canPause: () => state === 'playing',
+  right: 68,                                  // clear of the mute button
+  onPause: () => AudioFX.setBed(0),
+});
+
 requestAnimationFrame(tick);
 
 // tiny debug/test handle (not used by the game itself)
@@ -2096,7 +2312,11 @@ window.__sink = {
   get objects() { return objs.length; },
   get info() { return renderer.info.render; },
   get standings() { return holes.map((h) => ({ name: h.name, score: h.score, r: h.drawR })); },
+  get speed() { return speedFor(player.drawR); },
+  get faded() { return fading.size; },
   clock(t) { timeLeft = t; },
+  grow(area) { growHole(player, area); },
+  place(x, z) { player.x = x; player.z = z; player.vx = player.vz = 0; camTarget.set(x, 0, z); },
 };
 
 if ('serviceWorker' in navigator) {

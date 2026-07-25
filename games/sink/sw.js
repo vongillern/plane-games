@@ -1,9 +1,10 @@
-const CACHE = 'am-sink-v1';
+const CACHE = 'am-sink-v2';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './pause.js',
   './manifest.webmanifest',
   './vendor/three.module.js',
   './icon-192.png',

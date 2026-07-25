@@ -76,6 +76,27 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
    code: the player's mental model, each input, and how it's discovered. Read it
    before touching input code; update it when interactions change.
 
+## Pause (every real-time game)
+
+A phone interrupts you constantly, and "die or close the tab" is not an exit.
+Every game with a running clock ships the same pause: `pause.js`, copied
+unchanged into each game directory (each app stays independently installable,
+so a shared parent file would break `scope: "."`).
+
+- One call at boot: `installPause({ canPause, onPause, top, right })`. The
+  module owns the button, the card, the keys (`Esc` / `P`) and auto-pause on
+  background; `canPause()` decides when there is anything to freeze, so the
+  button never appears on a start or game-over screen.
+- **The module never owns the clock.** Each game asks `pause.active` at the top
+  of its own loop and returns before its update, resetting its own `last`/
+  `lastTs` so no time debt is banked. Skipping the draw leaves the last frame
+  on screen under the card, which is exactly what a paused game should look
+  like.
+- The card borrows the game's `--accent`, so it belongs to the game it covers.
+- Placement is per-game (`top` / `right`): the button gets out of the way of
+  whatever HUD a game already has, but stays in the same corner everywhere.
+- 2048 is the one game without it — nothing is running to freeze.
+
 ## PWA checklist (every app: hub and each game)
 
 Each directory is a fully independent, installable PWA:

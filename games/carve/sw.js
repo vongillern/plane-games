@@ -1,9 +1,10 @@
-const CACHE = 'am-carve-v5';
+const CACHE = 'am-carve-v6';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './pause.js',
   './manifest.webmanifest',
   './vendor/three.module.js',
   './icon-192.png',

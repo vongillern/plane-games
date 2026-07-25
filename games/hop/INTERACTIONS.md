@@ -19,6 +19,9 @@ kept flying away from it. Finger-follow removed that failure mode.)
   target — input is never wasted; releasing clears it).
 - **Tap on Dead** → restart. "Bounce again" button (52px) also present.
 - Keyboard: ←/→ or A/D hold (constant-acceleration lean), Space/Enter/R.
+- **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
+  card anywhere to resume; backgrounding the app pauses too. Shared
+  behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
 
 ## Discoverability
 - Start overlay: "drag — the jelly follows your finger" — the exact verb for

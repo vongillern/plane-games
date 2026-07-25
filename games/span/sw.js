@@ -1,10 +1,11 @@
-const CACHE = 'am-span-v2';
+const CACHE = 'am-span-v3';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './pause.js',
   './physics.js',
   './levels.js',
   './manifest.webmanifest',

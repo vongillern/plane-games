@@ -1,3 +1,4 @@
+import { installPause } from './pause.js';
 // Snake — offline PWA. Vanilla ES module.
 // The differentiator: the snake steps on a fixed grid timer but every frame
 // interpolates between grid cells, so the body glides as one continuous ribbon.
@@ -66,7 +67,7 @@ const DIRS = {
   right: { x: 1, y: 0 },
 };
 
-let state;          // 'ready' | 'playing' | 'paused' | 'dying' | 'dead'
+let state;          // 'ready' | 'playing' | 'dying' | 'dead'
 let body;           // array of {x,y}, head first
 let dir;            // current direction vector
 let dirQueue;       // up to 2 queued turns
@@ -358,6 +359,7 @@ function render(ts) {
 // ---- Main loop ------------------------------------------------------------
 function frame(ts) {
   requestAnimationFrame(frame);
+  if (pause.active) { lastTs = null; return; }
 
   if (lastTs == null) lastTs = ts;
   let dt = ts - lastTs;
@@ -496,22 +498,13 @@ boardEl.addEventListener('pointercancel', () => { ptr = null; });
 boardEl.addEventListener('dblclick', (e) => e.preventDefault());
 boardEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
-// ---- Pause on tab hide ----------------------------------------------------
-document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    if (state === 'playing') state = 'paused';
-  } else if (state === 'paused') {
-    lastTs = null;
-    acc = 0;
-    state = 'playing';
-  }
-});
-
 // ---- Boot -----------------------------------------------------------------
 best = loadBest();
 bestEl.textContent = best;
 sizeCanvas();
 reset();
+// the shared card owns pause now, including the tab-hide case
+const pause = installPause({ canPause: () => state === 'playing' });
 requestAnimationFrame(frame);
 
 // ---- Service worker -------------------------------------------------------
