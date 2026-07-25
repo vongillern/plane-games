@@ -1,4 +1,4 @@
-const CACHE = 'am-hub-v7';
+const CACHE = 'am-hub-v8';
 
 const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker', 'carve'];
 const GAME_FILES = [

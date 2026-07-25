@@ -46,7 +46,9 @@ same drag becomes rotation. One verb (drag), two contexts (snow / air).
   approaches and landings are kept clear of obstacles.
 - Crash → tumble + spray, game-over panel within 300 ms, tap restarts
   instantly *from where you crashed* (the mountain continues; score
-  resets).
+  resets). The panel ignores taps for its first 400 ms so the tail of a
+  drag that was in flight during the crash can't restart the run by
+  accident.
 - Attract mode: on the start screen the rider slowly cruises the slope
   behind the panel, showing the scene before the first input.
 
