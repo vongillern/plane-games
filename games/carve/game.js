@@ -295,89 +295,114 @@ scene.add(horizon);
 
 const ridgeMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide });
 
-// Painted-style peaks: each silhouette segment is a facet — sun-facing
-// slopes get bright snow, opposing slopes get deep shadow blue, with rock
-// tones bleeding in toward the base. Optionally streak thin white ski runs
-// down the tallest shadow faces (see the reference's far mountain).
-function ridgeGeo(span, count, hMin, hMax, litC, shadC, haze, runs = 0) {
+// Low-poly painted mountains: a jittered grid draped from a triangular-peak
+// skyline down to the valley, one flat color per facet. Facets are lit by a
+// fake sun from the upper-left (slope decides bright snow vs shadow blue),
+// steep low faces read as blue rock, and thin white ski runs streak down
+// the biggest faces like in the reference painting.
+function mountainGeo(span, colW, hMin, hMax, haze, runs) {
   const fogC = new THREE.Color(FOG_COLOR);
-  const lit = new THREE.Color(litC).lerp(fogC, haze * 0.55);
-  const shad = new THREE.Color(shadC).lerp(fogC, haze);
-  const rockLit = lit.clone().multiplyScalar(0.9);
-  const rockShad = shad.clone().multiplyScalar(0.78);
-  const pts = [];
-  for (let i = 0; i <= count; i++) {
-    const x = -span + (2 * span * i) / count + rand(-16, 16);
-    const peak = i % 2 === 1;
-    pts.push([x, peak ? rand(hMin, hMax) : rand(hMin * 0.05, hMin * 0.28)]);
+  const snowLit = new THREE.Color(0xffffff).lerp(fogC, haze * 0.35);
+  const snowShad = new THREE.Color(0xb4cce9).lerp(fogC, haze);
+  const rockLit = new THREE.Color(0x7ba3d4).lerp(fogC, haze * 0.7);
+  const rockShad = new THREE.Color(0x35619e).lerp(fogC, haze);
+  const BOT = -36;
+  const K = Math.max(3, Math.round(span / 110));
+  const peaks = [];
+  for (let i = 0; i < K; i++) {
+    peaks.push({
+      c: -span + (2 * span * (i + 0.5)) / K + rand(-45, 45),
+      h: rand(hMin, hMax),
+      w: rand(75, 135),
+    });
   }
-  const sil = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [x0, y0] = pts[i], [x1, y1] = pts[i + 1];
-    sil.push([x0, y0]);
-    sil.push([lerp(x0, x1, 0.38) + rand(-7, 7), lerp(y0, y1, 0.38) * rand(0.76, 1.04)]);
-    sil.push([lerp(x0, x1, 0.72) + rand(-7, 7), lerp(y0, y1, 0.72) * rand(0.78, 1.05)]);
+  const hAt = (x) => {
+    let y = 4;
+    for (const p of peaks) y = Math.max(y, p.h * (1 - Math.abs(x - p.c) / p.w));
+    return y + 5 * Math.sin(x * 0.043) + 3.5 * Math.sin(x * 0.11 + 2.2);
+  };
+  const cols = Math.ceil((2 * span) / colW);
+  const rows = 6;
+  const grid = [];
+  for (let ci = 0; ci <= cols; ci++) {
+    const gx = -span + (2 * span * ci) / cols;
+    const top = Math.max(hAt(gx), 2);
+    const col = [];
+    for (let r = 0; r <= rows; r++) {
+      const t = r / rows;
+      const jx = r === 0 || ci === 0 || ci === cols ? 0 : (hash2(ci * 3.7, r * 2.9) - 0.5) * colW * 0.7;
+      const jy = r === 0 ? 0 : (hash2(ci * 1.9, r * 4.1) - 0.5) * 9 * t;
+      const jz = (hash2(ci * 2.3, r * 3.3) - 0.5) * 5;
+      col.push([gx + jx, top * (1 - t) + BOT * t + jy, jz]);
+    }
+    grid.push(col);
   }
-  sil.push(pts[pts.length - 1]);
-  const pos = [], col = [];
-  const bottom = -36;
+  const pos = [], colr = [];
   const cT = new THREE.Color();
-  const pushC = (c, j) => col.push(Math.min(1, c.r * j), Math.min(1, c.g * j), Math.min(1, c.b * j));
-  for (let i = 0; i < sil.length - 1; i++) {
-    const [x0, y0] = sil[i], [x1, y1] = sil[i + 1];
-    const rising = y1 >= y0;
-    const face = rising ? lit : shad;
-    const rock = rising ? rockLit : rockShad;
-    const j = 1 + (hash2(i, 3) - 0.5) * 0.1;
-    pos.push(x0, bottom, 0, x1, bottom, 0, x0, y0, 0);
-    cT.copy(face).lerp(rock, 0.6); pushC(cT, j); pushC(cT, j);
-    cT.copy(face); pushC(cT, j);
-    pos.push(x1, bottom, 0, x1, y1, 0, x0, y0, 0);
-    cT.copy(face).lerp(rock, 0.6); pushC(cT, j);
-    cT.copy(face); pushC(cT, j); pushC(cT, j);
+  const pushTri = (a, b, c, seed) => {
+    const yc = (a[1] + b[1] + c[1]) / 3;
+    const xc = (a[0] + b[0] + c[0]) / 3;
+    let lo = a, hi = a;
+    for (const p of [b, c]) { if (p[0] < lo[0]) lo = p; if (p[0] > hi[0]) hi = p; }
+    const slope = (hi[1] - lo[1]) / Math.max(hi[0] - lo[0], 1e-3);
+    const bri = clamp(0.66 + slope * 0.9, 0.3, 1);
+    const hl = Math.max(hAt(xc), 8);
+    const frac = yc / hl;
+    const snowFrac = 0.3 + (hash2(seed, 11) - 0.5) * 0.2;
+    const isSnow = frac > snowFrac || (Math.abs(slope) < 0.25 && frac > 0.12);
+    cT.copy(isSnow ? snowShad : rockShad).lerp(isSnow ? snowLit : rockLit, bri);
+    const j = 1 + (hash2(seed, 5) - 0.5) * 0.08;
+    for (const p of [a, b, c]) pos.push(p[0], p[1], p[2]);
+    for (let k = 0; k < 3; k++) colr.push(Math.min(1, cT.r * j), Math.min(1, cT.g * j), Math.min(1, cT.b * j));
+  };
+  for (let ci = 0; ci < cols; ci++) {
+    for (let r = 0; r < rows; r++) {
+      const a = grid[ci][r], b = grid[ci + 1][r], c = grid[ci][r + 1], d = grid[ci + 1][r + 1];
+      if (hash2(ci, r) < 0.5) { pushTri(a, b, c, ci * 31 + r); pushTri(b, d, c, ci * 37 + r); }
+      else { pushTri(a, b, d, ci * 31 + r); pushTri(a, d, c, ci * 37 + r); }
+    }
   }
   if (runs > 0) {
-    // tallest peaks first
-    const peaks = pts.filter((_, i) => i % 2 === 1).sort((a, b) => b[1] - a[1]).slice(0, runs);
-    const runC = new THREE.Color(0xf2f7fd).lerp(fogC, haze * 0.4);
-    for (const [px, py] of peaks) {
+    const tallest = [...peaks].sort((p, q) => q.h - p.h).slice(0, runs);
+    const runC = new THREE.Color(0xf4f9fe).lerp(fogC, haze * 0.5);
+    for (const p of tallest) {
       const dir = randSign();
       const seed = rand(0, 9);
-      const N = 6;
+      const N = 7;
       const pt = (t) => [
-        px + dir * (t * t * 30 + Math.sin(t * 6.5 + seed) * 6),
-        py * 0.94 * (1 - t) + (bottom * 0.55) * t,
+        p.c + dir * (t * p.w * 0.8 + Math.sin(t * 5.5 + seed) * 7),
+        p.h * 0.9 * (1 - t) + BOT * 0.5 * t,
       ];
       for (let k = 0; k < N; k++) {
         const t0 = k / N, t1 = (k + 1) / N;
         const [ax, ay] = pt(t0), [bx, by] = pt(t1);
-        const w0 = (0.9 + 4.2 * t0) / 2, w1 = (0.9 + 4.2 * t1) / 2;
-        pos.push(ax - w0, ay, 1.5, ax + w0, ay, 1.5, bx - w1, by, 1.5);
-        pos.push(ax + w0, ay, 1.5, bx + w1, by, 1.5, bx - w1, by, 1.5);
-        for (let v = 0; v < 6; v++) pushC(runC, 1);
+        const w0 = (0.8 + 4 * t0) / 2, w1 = (0.8 + 4 * t1) / 2;
+        pos.push(ax - w0, ay, 3.2, ax + w0, ay, 3.2, bx - w1, by, 3.2);
+        pos.push(ax + w0, ay, 3.2, bx + w1, by, 3.2, bx - w1, by, 3.2);
+        for (let v = 0; v < 6; v++) colr.push(runC.r, runC.g, runC.b);
       }
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
   return g;
 }
-function addRidge(z, y, span, count, hMin, hMax, litC, shadC, haze, runs) {
-  const m = new THREE.Mesh(ridgeGeo(span, count, hMin, hMax, litC, shadC, haze, runs), ridgeMat);
+function addMountains(z, y, span, colW, hMin, hMax, haze, runs) {
+  const m = new THREE.Mesh(mountainGeo(span, colW, hMin, hMax, haze, runs), ridgeMat);
   m.position.set(0, y, z);
   m.frustumCulled = false;
   horizon.add(m);
   return m;
 }
-// nearer peaks bold and saturated, farthest silhouette taller but hazier
-addRidge(-620, -0.5, 900, 15, 130, 205, 0xe9f2fc, 0x6b95cc, 0.30, 0);
-addRidge(-505, -0.5, 780, 11, 80, 150, 0xeff6fe, 0x3f74b8, 0.06, 3);
+// nearer range bold and saturated, farthest silhouette taller but hazier
+addMountains(-620, -0.5, 900, 26, 130, 205, 0.30, 0);
+addMountains(-505, -0.5, 780, 20, 80, 150, 0.06, 3);
 
 // snowy valley floor — fills the wedge between the fogged piste horizon
 // and the mountain bases, so the village and forest sit on real ground
 {
-  const g = new THREE.PlaneGeometry(1400, 540, 1, 6);
+  const g = new THREE.PlaneGeometry(1400, 620, 1, 6);
   g.rotateX(-Math.PI / 2);
   const pa = g.attributes.position;
   const col = [];
@@ -385,13 +410,14 @@ addRidge(-505, -0.5, 780, 11, 80, 150, 0xeff6fe, 0x3f74b8, 0.06, 3);
   const far = new THREE.Color(0xcbdff2);
   const cT = new THREE.Color();
   for (let i = 0; i < pa.count; i++) {
-    const t = clamp((-pa.getZ(i) + 270) / 540, 0, 1); // 0 at near edge
+    const t = clamp((-pa.getZ(i) + 310) / 620, 0, 1); // 0 at near edge
     cT.copy(near).lerp(far, t * t);
     col.push(cT.r, cT.g, cT.b);
   }
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  // near edge tucks under the fogged piste horizon so no sky gap shows
   const m = new THREE.Mesh(g, ridgeMat);
-  m.position.set(0, -36.5, -450);
+  m.position.set(0, -36.5, -430);
   m.frustumCulled = false;
   horizon.add(m);
 }
@@ -974,58 +1000,58 @@ function updateSpray(dt) {
 const rider = new THREE.Group();
 scene.add(rider);
 
+// Rounded character: capsules and spheres only — no boxes.
+// Board: a flattened capsule reads as a rounded deck with kicked ends.
 const boardMesh = new THREE.Mesh(mergeParts([
-  boxPart(0.38, 0.08, 1.42, 0x143b5c, mat4(0, 0.06, 0)),
-  { geo: new THREE.CylinderGeometry(0.19, 0.19, 0.38, 12), color: 0x143b5c, matrix: mat4(0, 0.06, 0.71, 0, 0, Math.PI / 2, 1, 1, 0.42) },
-  { geo: new THREE.CylinderGeometry(0.19, 0.19, 0.38, 12), color: 0x143b5c, matrix: mat4(0, 0.06, -0.71, 0, 0, Math.PI / 2, 1, 1, 0.42) },
-  boxPart(0.34, 0.02, 0.5, 0x2dd4bf, mat4(0, 0.105, 0)),
-  boxPart(0.3, 0.07, 0.16, 0x101820, mat4(0, 0.14, 0.27)),
-  boxPart(0.3, 0.07, 0.16, 0x101820, mat4(0, 0.14, -0.27)),
+  { geo: new THREE.CapsuleGeometry(0.2, 1.16, 5, 14), color: 0x153a5e, matrix: mat4(0, 0.07, 0, Math.PI / 2, 0, 0, 1, 1, 0.32) },
+  { geo: new THREE.CapsuleGeometry(0.155, 0.5, 4, 10), color: 0x2dd4bf, matrix: mat4(0, 0.115, 0, Math.PI / 2, 0, 0, 1, 1, 0.14) },
+  { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 10), color: 0x101820, matrix: mat4(0, 0.15, 0.27, 0, 0, 0, 1.2, 1, 1.5) },
+  { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 10), color: 0x101820, matrix: mat4(0, 0.15, -0.27, 0, 0, 0, 1.2, 1, 1.5) },
 ]), lambertVC);
 rider.add(boardMesh);
 
 const legs = new THREE.Mesh(mergeParts([
-  boxPart(0.17, 0.5, 0.2, 0xe64c2b, mat4(0, -0.25, 0.27)),
-  boxPart(0.17, 0.5, 0.2, 0xe64c2b, mat4(0, -0.25, -0.27)),
-  boxPart(0.2, 0.16, 0.26, 0x22314a, mat4(0, -0.44, 0.27)),
-  boxPart(0.2, 0.16, 0.26, 0x22314a, mat4(0, -0.44, -0.27)),
+  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 4, 10), color: 0xf05030, matrix: mat4(0, -0.2, 0.27) },
+  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 4, 10), color: 0xf05030, matrix: mat4(0, -0.2, -0.27) },
+  { geo: new THREE.SphereGeometry(0.115, 12, 10), color: 0x1c2b47, matrix: mat4(0, -0.42, 0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
+  { geo: new THREE.SphereGeometry(0.115, 12, 10), color: 0x1c2b47, matrix: mat4(0, -0.42, -0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
 ]), lambertVC);
-legs.position.y = 0.68;
+legs.position.y = 0.62;
 rider.add(legs);
 
 const torso = new THREE.Group();
-torso.position.y = 0.9;
+torso.position.y = 0.84;
 rider.add(torso);
 torso.add(new THREE.Mesh(mergeParts([
-  boxPart(0.46, 0.54, 0.36, 0xff5a36, mat4(0, 0.27, 0)),
-  boxPart(0.48, 0.12, 0.38, 0xd94a2a, mat4(0, 0.05, 0)),
-  boxPart(0.2, 0.1, 0.37, 0xffd23f, mat4(0, 0.36, 0)),
+  { geo: new THREE.CapsuleGeometry(0.235, 0.2, 6, 14), color: 0xff5a36, matrix: mat4(0, 0, 0, 0, 0, 0, 1.03, 1, 0.8) },
+  { geo: new THREE.CylinderGeometry(0.242, 0.25, 0.1, 14), color: 0xd94a2a, matrix: mat4(0, -0.2, 0, 0, 0, 0, 1, 1, 0.78) },
+  { geo: new THREE.CylinderGeometry(0.245, 0.245, 0.09, 14), color: 0xffd23f, matrix: mat4(0, 0.07, 0, 0, 0, 0, 1, 1, 0.78) },
 ]), lambertVC));
 
 function makeArm() {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(mergeParts([
-    boxPart(0.13, 0.42, 0.13, 0xff5a36, mat4(0, -0.21, 0)),
-    boxPart(0.15, 0.14, 0.15, 0x2f6bed, mat4(0, -0.45, 0)),
+    { geo: new THREE.SphereGeometry(0.082, 10, 8), color: 0xff5a36, matrix: mat4(0, 0, 0) },
+    { geo: new THREE.CapsuleGeometry(0.072, 0.2, 4, 10), color: 0xff5a36, matrix: mat4(0, -0.16, 0) },
+    { geo: new THREE.SphereGeometry(0.092, 10, 8), color: 0x2f6bed, matrix: mat4(0, -0.33, 0) },
   ]), lambertVC));
   return g;
 }
 const armL = makeArm(), armR = makeArm();
-armL.position.set(-0.29, 0.46, 0);
-armR.position.set(0.29, 0.46, 0);
+armL.position.set(-0.27, 0.4, 0);
+armR.position.set(0.27, 0.4, 0);
 torso.add(armL, armR);
 
 const head = new THREE.Group();
-head.position.y = 0.72;
+head.position.y = 0.58;
 torso.add(head);
 head.add(new THREE.Mesh(mergeParts([
-  { geo: new THREE.SphereGeometry(0.165, 14, 12), color: 0xf5c9a2, matrix: mat4(0, 0, 0) },
-  { geo: new THREE.CylinderGeometry(0.175, 0.175, 0.08, 14), color: 0x2f6bed, matrix: mat4(0, 0.1, 0) },
-  { geo: new THREE.CylinderGeometry(0.16, 0.172, 0.07, 14), color: 0xffd23f, matrix: mat4(0, 0.17, 0) },
-  { geo: new THREE.SphereGeometry(0.13, 12, 10), color: 0x2f6bed, matrix: mat4(0, 0.22, 0, 0, 0, 0, 1, 0.7, 1) },
-  { geo: new THREE.SphereGeometry(0.07, 10, 8), color: 0xffffff, matrix: mat4(0, 0.31, 0) },
-  boxPart(0.26, 0.09, 0.06, 0x16233c, mat4(0, 0.02, -0.14)),
-  boxPart(0.3, 0.05, 0.02, 0xdfe8f4, mat4(0, 0.02, -0.16)),
+  { geo: new THREE.SphereGeometry(0.17, 16, 14), color: 0xf5c9a2, matrix: mat4(0, 0, 0) },
+  { geo: new THREE.CapsuleGeometry(0.05, 0.17, 4, 10), color: 0x16233c, matrix: mat4(0, 0.025, -0.145, 0, 0, Math.PI / 2, 1, 1, 0.6) },
+  { geo: new THREE.CylinderGeometry(0.178, 0.182, 0.08, 16), color: 0x2f6bed, matrix: mat4(0, 0.09, 0) },
+  { geo: new THREE.CylinderGeometry(0.168, 0.176, 0.065, 16), color: 0xffd23f, matrix: mat4(0, 0.16, 0) },
+  { geo: new THREE.SphereGeometry(0.162, 14, 12), color: 0x2f6bed, matrix: mat4(0, 0.17, 0, 0, 0, 0, 1, 0.72, 1) },
+  { geo: new THREE.SphereGeometry(0.075, 10, 8), color: 0xffffff, matrix: mat4(0, 0.31, 0) },
 ]), lambertVC));
 
 const blobShadow = new THREE.Mesh(
@@ -1636,16 +1662,16 @@ function updateRider(dt) {
 
   const cr = p.crouch;
   legs.scale.y = 1 - cr * 0.4;
-  legs.position.y = 0.68 - cr * 0.16;
+  legs.position.y = 0.62 - cr * 0.14;
   boardMesh.position.y = p.grounded ? 0 : 0.13 * cr; // board tucks up with the knees mid-air
-  torso.position.y = 0.9 - cr * 0.3;
+  torso.position.y = 0.84 - cr * 0.28;
   torso.rotation.x = cr * 0.32;
   torso.rotation.y = -p.lean * 0.25;
 
   const spread = p.grounded ? Math.abs(p.lean) : 0.25;
   const grab = !p.grounded ? clamp((elapsed - p.airStart) * 4, 0, 1) : 0;
-  armL.rotation.z = -(0.4 + spread * 0.9);
-  armR.rotation.z = 0.4 + spread * 0.9;
+  armL.rotation.z = -(0.24 + spread * 0.8);
+  armR.rotation.z = 0.24 + spread * 0.8;
   armL.rotation.x = grab * 0.5;
   armR.rotation.x = -grab * 1.1; // rear hand reaches for the board
   head.rotation.y = -0.28 - torso.rotation.y;
