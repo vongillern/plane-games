@@ -46,6 +46,26 @@ const hash2 = (a, b) => {
   const n = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return n - Math.floor(n);
 };
+// smooth value noise + ridged fBm — the basis for organic mountain shapes
+function vnoise(x, z) {
+  const xi = Math.floor(x), zi = Math.floor(z);
+  const xf = x - xi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), w = zf * zf * (3 - 2 * zf);
+  const a = hash2(xi, zi), b = hash2(xi + 1, zi), c = hash2(xi, zi + 1), d = hash2(xi + 1, zi + 1);
+  return lerp(lerp(a, b, u), lerp(c, d, u), w);
+}
+function ridged(x, z) {
+  let amp = 1, freq = 1, sum = 0, tot = 0;
+  for (let o = 0; o < 4; o++) {
+    const n = vnoise(x * freq + o * 13.7, z * freq + o * 7.3);
+    const r = 1 - Math.abs(2 * n - 1);
+    sum += r * amp; // linear ridging keeps crease lines sharp
+    tot += amp;
+    amp *= 0.5;
+    freq *= 2.13;
+  }
+  return sum / tot;
+}
 
 let best = 0;
 try { best = parseInt(localStorage.getItem(BEST_KEY), 10) || 0; } catch {}
@@ -107,10 +127,12 @@ scene.fog = new THREE.Fog(FOG_COLOR, 42, 295);
 
 const camera = new THREE.PerspectiveCamera(BASE_FOV, window.innerWidth / window.innerHeight, 0.1, 1400);
 
-const hemi = new THREE.HemisphereLight(0xcfe5ff, 0xcddcec, 1.55);
+// sun shines from up-left BEHIND the camera so the mountain faces the
+// player looks at catch direct light instead of sitting in flat shade
+const hemi = new THREE.HemisphereLight(0xcfe5ff, 0xcddcec, 1.35);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0d6, 2.0);
-sun.position.set(-60, 90, -30);
+sun.position.set(-60, 90, 55);
 scene.add(sun);
 
 // ---------------------------------------------------------------------------
@@ -295,109 +317,91 @@ scene.add(horizon);
 
 const ridgeMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide });
 
-// Low-poly painted mountains: a jittered grid draped from a triangular-peak
-// skyline down to the valley, one flat color per facet. Facets are lit by a
-// fake sun from the upper-left (slope decides bright snow vs shadow blue),
-// steep low faces read as blue rock, and thin white ski runs streak down
-// the biggest faces like in the reference painting.
-function mountainGeo(span, colW, hMin, hMax, haze, runs) {
+// A real 3D mountain range: a smooth ridged-noise heightfield rising from
+// the valley floor, with soft vertex normals lit by the scene sun. Snow and
+// blue rock blend continuously by altitude and steepness, aerial haze grows
+// with depth, and white ski runs are painted into the front faces.
+{
+  const COLS = 200, ROWS = 20;
+  const X0 = -950, X1 = 950, Z0 = -330, Z1 = -880;
+  const BASE_Y = -36.5;
+  // tall massifs separated by lower passes, so the skyline has drama
+  const peakMask = (x) => 0.45 + 0.95 * Math.pow(vnoise(x * 0.0011, 9.2), 1.4);
+  const height = (x, z) => {
+    const tz = clamp((z - Z0) / (Z1 - Z0), 0, 1);
+    let p = clamp(tz / 0.45, 0, 1);
+    p = p * p * (3 - 2 * p);
+    const r = ridged(x * 0.0055, z * 0.0055);
+    const r2 = ridged(x * 0.013 + 7, z * 0.013);
+    return p * (16 + peakMask(x) * 260 * Math.pow(r, 1.2) + 26 * r2);
+  };
+  const runPath = (k, z) => [-260, 40, 320][k] + Math.sin(z * 0.012 + k * 2.1) * 30;
+
+  const verts = (COLS + 1) * (ROWS + 1);
+  const pos = new Float32Array(verts * 3);
+  const col = new Float32Array(verts * 3);
   const fogC = new THREE.Color(FOG_COLOR);
-  const snowLit = new THREE.Color(0xffffff).lerp(fogC, haze * 0.35);
-  const snowShad = new THREE.Color(0xb4cce9).lerp(fogC, haze);
-  const rockLit = new THREE.Color(0x7ba3d4).lerp(fogC, haze * 0.7);
-  const rockShad = new THREE.Color(0x35619e).lerp(fogC, haze);
-  const BOT = -36;
-  const K = Math.max(3, Math.round(span / 110));
-  const peaks = [];
-  for (let i = 0; i < K; i++) {
-    peaks.push({
-      c: -span + (2 * span * (i + 0.5)) / K + rand(-45, 45),
-      h: rand(hMin, hMax),
-      w: rand(75, 135),
-    });
-  }
-  const hAt = (x) => {
-    let y = 4;
-    for (const p of peaks) y = Math.max(y, p.h * (1 - Math.abs(x - p.c) / p.w));
-    return y + 5 * Math.sin(x * 0.043) + 3.5 * Math.sin(x * 0.11 + 2.2);
-  };
-  const cols = Math.ceil((2 * span) / colW);
-  const rows = 6;
-  const grid = [];
-  for (let ci = 0; ci <= cols; ci++) {
-    const gx = -span + (2 * span * ci) / cols;
-    const top = Math.max(hAt(gx), 2);
-    const col = [];
-    for (let r = 0; r <= rows; r++) {
-      const t = r / rows;
-      const jx = r === 0 || ci === 0 || ci === cols ? 0 : (hash2(ci * 3.7, r * 2.9) - 0.5) * colW * 0.7;
-      const jy = r === 0 ? 0 : (hash2(ci * 1.9, r * 4.1) - 0.5) * 9 * t;
-      const jz = (hash2(ci * 2.3, r * 3.3) - 0.5) * 5;
-      col.push([gx + jx, top * (1 - t) + BOT * t + jy, jz]);
-    }
-    grid.push(col);
-  }
-  const pos = [], colr = [];
-  const cT = new THREE.Color();
-  const pushTri = (a, b, c, seed) => {
-    const yc = (a[1] + b[1] + c[1]) / 3;
-    const xc = (a[0] + b[0] + c[0]) / 3;
-    let lo = a, hi = a;
-    for (const p of [b, c]) { if (p[0] < lo[0]) lo = p; if (p[0] > hi[0]) hi = p; }
-    const slope = (hi[1] - lo[1]) / Math.max(hi[0] - lo[0], 1e-3);
-    const bri = clamp(0.66 + slope * 0.9, 0.3, 1);
-    const hl = Math.max(hAt(xc), 8);
-    const frac = yc / hl;
-    const snowFrac = 0.3 + (hash2(seed, 11) - 0.5) * 0.2;
-    const isSnow = frac > snowFrac || (Math.abs(slope) < 0.25 && frac > 0.12);
-    cT.copy(isSnow ? snowShad : rockShad).lerp(isSnow ? snowLit : rockLit, bri);
-    const j = 1 + (hash2(seed, 5) - 0.5) * 0.08;
-    for (const p of [a, b, c]) pos.push(p[0], p[1], p[2]);
-    for (let k = 0; k < 3; k++) colr.push(Math.min(1, cT.r * j), Math.min(1, cT.g * j), Math.min(1, cT.b * j));
-  };
-  for (let ci = 0; ci < cols; ci++) {
-    for (let r = 0; r < rows; r++) {
-      const a = grid[ci][r], b = grid[ci + 1][r], c = grid[ci][r + 1], d = grid[ci + 1][r + 1];
-      if (hash2(ci, r) < 0.5) { pushTri(a, b, c, ci * 31 + r); pushTri(b, d, c, ci * 37 + r); }
-      else { pushTri(a, b, d, ci * 31 + r); pushTri(a, d, c, ci * 37 + r); }
-    }
-  }
-  if (runs > 0) {
-    const tallest = [...peaks].sort((p, q) => q.h - p.h).slice(0, runs);
-    const runC = new THREE.Color(0xf4f9fe).lerp(fogC, haze * 0.5);
-    for (const p of tallest) {
-      const dir = randSign();
-      const seed = rand(0, 9);
-      const N = 7;
-      const pt = (t) => [
-        p.c + dir * (t * p.w * 0.8 + Math.sin(t * 5.5 + seed) * 7),
-        p.h * 0.9 * (1 - t) + BOT * 0.5 * t,
-      ];
-      for (let k = 0; k < N; k++) {
-        const t0 = k / N, t1 = (k + 1) / N;
-        const [ax, ay] = pt(t0), [bx, by] = pt(t1);
-        const w0 = (0.8 + 4 * t0) / 2, w1 = (0.8 + 4 * t1) / 2;
-        pos.push(ax - w0, ay, 3.2, ax + w0, ay, 3.2, bx - w1, by, 3.2);
-        pos.push(ax + w0, ay, 3.2, bx + w1, by, 3.2, bx - w1, by, 3.2);
-        for (let v = 0; v < 6; v++) colr.push(runC.r, runC.g, runC.b);
+  // painterly palette: shadowed snow is BLUE, like the reference painting
+  const snowLitC = new THREE.Color(0xffffff);
+  const snowShadC = new THREE.Color(0x7ea6d8);
+  const rockLitC = new THREE.Color(0x87a6cf);
+  const rockShadC = new THREE.Color(0x3a5f96);
+  // baking sun kept mostly LATERAL so each peak splits into a bright
+  // left face and a blue right face — vertical light washes everything
+  const SUNX = -0.72, SUNY = 0.52, SUNZ = 0.16;
+  const cT = new THREE.Color(), cR = new THREE.Color();
+  let vi = 0;
+  for (let r = 0; r <= ROWS; r++) {
+    const z = Z0 + ((Z1 - Z0) * r) / ROWS;
+    const tz = r / ROWS;
+    for (let c = 0; c <= COLS; c++) {
+      const x = X0 + ((X1 - X0) * c) / COLS;
+      const h = height(x, z);
+      pos[vi * 3] = x;
+      pos[vi * 3 + 1] = BASE_Y + h;
+      pos[vi * 3 + 2] = z;
+      const e = 9;
+      const sx = (height(x + e, z) - height(x - e, z)) / (2 * e);
+      const sz = (height(x, z + e) - height(x, z - e)) / (2 * e);
+      const slope = Math.hypot(sx, sz);
+      // baked sun: surface normal · sun dir, with a punchy two-tone curve
+      const inv = 1 / Math.hypot(sx, 1, sz);
+      const d = clamp((-sx * SUNX + SUNY - sz * SUNZ) * inv, 0, 1);
+      const light = clamp((d - 0.3) / 0.42, 0, 1);
+      // snow blankets the tops and benches; rock breaks through steeps
+      let snow = clamp(0.72 - slope * 0.5 + h / 340, 0, 1);
+      snow = snow * snow * (3 - 2 * snow);
+      // painted ski runs wind down the front faces
+      if (tz < 0.6 && h > 22) {
+        for (let k = 0; k < 3; k++) {
+          if (Math.abs(x - runPath(k, z)) < 9) snow = 1;
+        }
       }
+      cR.copy(rockShadC).lerp(rockLitC, light);
+      cT.copy(snowShadC).lerp(snowLitC, light);
+      cR.lerp(cT, snow);
+      const haze = clamp(0.06 + tz * 0.5, 0, 0.65);
+      cR.lerp(fogC, haze);
+      col[vi * 3] = cR.r; col[vi * 3 + 1] = cR.g; col[vi * 3 + 2] = cR.b;
+      vi++;
+    }
+  }
+  const idx = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const a = r * (COLS + 1) + c, b = a + 1, d = a + COLS + 1, e2 = d + 1;
+      idx.push(a, b, d, b, e2, d);
     }
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
-  return g;
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  g.setIndex(idx);
+  // unlit: the baked painterly shading IS the look — smooth, never grey
+  const range = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+  range.frustumCulled = false;
+  horizon.add(range);
 }
-function addMountains(z, y, span, colW, hMin, hMax, haze, runs) {
-  const m = new THREE.Mesh(mountainGeo(span, colW, hMin, hMax, haze, runs), ridgeMat);
-  m.position.set(0, y, z);
-  m.frustumCulled = false;
-  horizon.add(m);
-  return m;
-}
-// nearer range bold and saturated, farthest silhouette taller but hazier
-addMountains(-620, -0.5, 900, 26, 130, 205, 0.30, 0);
-addMountains(-505, -0.5, 780, 20, 80, 150, 0.06, 3);
 
 // snowy valley floor — fills the wedge between the fogged piste horizon
 // and the mountain bases, so the village and forest sit on real ground
@@ -543,7 +547,7 @@ function fillGridMesh(mesh, s0, uvScale) {
       na[i3] = N_TMP.x; na[i3 + 1] = N_TMP.y; na[i3 + 2] = N_TMP.z;
       const j = 0.965 + 0.035 * hash2(Math.round(x * 2.7), Math.round(s * 2.3));
       // slopes facing away from the sun read cool blue, not grey
-      const sunDot = N_TMP.x * -0.53 + N_TMP.y * 0.8 + N_TMP.z * -0.27;
+      const sunDot = N_TMP.x * -0.48 + N_TMP.y * 0.72 + N_TMP.z * 0.48;
       const cool = clamp(0.8 - sunDot, 0, 1) * 0.6;
       ca[i3] = j * (1 - cool * 0.10);
       ca[i3 + 1] = j * (1 - cool * 0.045);
@@ -595,8 +599,8 @@ const lambertVC = new THREE.MeshLambertMaterial({ vertexColors: true });
 
 // trees: snow mound, trunk, five frond tiers each draped with snow
 const treeParts = [
-  { geo: new THREE.ConeGeometry(1.75, 0.55, 10), color: 0xe9f0f8, matrix: mat4(0, 0.24, 0) },
-  { geo: new THREE.CylinderGeometry(0.13, 0.21, 1.15, 7), color: 0x5d4030, matrix: mat4(0, 0.58, 0) },
+  { geo: new THREE.ConeGeometry(1.75, 0.55, 16), color: 0xe9f0f8, matrix: mat4(0, 0.24, 0) },
+  { geo: new THREE.CylinderGeometry(0.13, 0.21, 1.15, 10), color: 0x5d4030, matrix: mat4(0, 0.58, 0) },
 ];
 {
   const tiers = [
@@ -604,19 +608,32 @@ const treeParts = [
     [2.44, 1.08, 0x366752], [3.02, 0.82, 0x3b6e57], [3.55, 0.56, 0x40755c],
   ];
   for (const [i, [y, r, c]] of tiers.entries()) {
-    treeParts.push({ geo: new THREE.ConeGeometry(r, 1.3, 9), color: c, matrix: mat4(0, y, 0, 0, i * 0.35, 0) });
-    treeParts.push({ geo: new THREE.ConeGeometry(r * 0.8, 0.48, 9), color: 0xf7fbff, matrix: mat4(0, y + 0.52, 0, 0, i * 0.35 + 0.17, 0) });
+    treeParts.push({ geo: new THREE.ConeGeometry(r, 1.3, 14), color: c, matrix: mat4(0, y, 0, 0, i * 0.35, 0) });
+    treeParts.push({ geo: new THREE.ConeGeometry(r * 0.8, 0.48, 14), color: 0xf7fbff, matrix: mat4(0, y + 0.52, 0, 0, i * 0.35 + 0.17, 0) });
   }
-  treeParts.push({ geo: new THREE.ConeGeometry(0.3, 0.5, 8), color: 0xffffff, matrix: mat4(0, 4.05, 0) });
+  treeParts.push({ geo: new THREE.ConeGeometry(0.3, 0.5, 12), color: 0xffffff, matrix: mat4(0, 4.05, 0) });
 }
 const treeGeo = mergeParts(treeParts);
 const trees = makeInstanced(treeGeo, lambertVC, 150);
 
-// rocks: boulder + snow cap + drift mound
+// rocks: smooth lumpy boulder + snow cap + drift mound
+function boulderGeo(r, seed) {
+  const g = new THREE.SphereGeometry(r, 14, 11);
+  const pa = g.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pa.count; i++) {
+    v.fromBufferAttribute(pa, i).normalize();
+    // displacement keyed to direction so the sphere's seam verts stay welded
+    const n = 1 + (vnoise(v.x * 2.4 + seed, v.y * 1.9 + v.z * 2.2) - 0.5) * 0.5;
+    pa.setXYZ(i, v.x * r * n, v.y * r * n, v.z * r * n);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 const rockGeo = mergeParts([
-  { geo: new THREE.ConeGeometry(1.35, 0.38, 10), color: 0xe9f0f8, matrix: mat4(0, 0.16, 0) },
-  { geo: new THREE.IcosahedronGeometry(0.78, 0), color: 0x8fa0b4, matrix: mat4(0, 0.42, 0, 0.3, 0.5, 0, 1, 0.72, 1) },
-  { geo: new THREE.IcosahedronGeometry(0.55, 0), color: 0xf4f9fe, matrix: mat4(0.04, 0.8, 0.02, 0.2, 0.9, 0, 1, 0.5, 1) },
+  { geo: new THREE.ConeGeometry(1.35, 0.38, 14), color: 0xe9f0f8, matrix: mat4(0, 0.16, 0) },
+  { geo: boulderGeo(0.8, 3.1), color: 0x8fa0b4, matrix: mat4(0, 0.42, 0, 0.3, 0.5, 0, 1, 0.72, 1) },
+  { geo: boulderGeo(0.55, 7.7), color: 0xf4f9fe, matrix: mat4(0.04, 0.78, 0.02, 0.2, 0.9, 0, 1, 0.55, 1) },
 ]);
 const rocks = makeInstanced(rockGeo, lambertVC, 56);
 
@@ -635,7 +652,7 @@ const fenceNets = makeInstanced(netGeo, netMat, 200);
 // chalets (lit) + glowing windows (unlit) sharing instance transforms.
 // Honey-wood walls, deep roof overhangs stacked with snow, a drift skirt.
 const chaletGeo = mergeParts([
-  { geo: new THREE.ConeGeometry(3.3, 0.5, 12), color: 0xe9f0f8, matrix: mat4(0, 0.2, 0) },
+  { geo: new THREE.ConeGeometry(3.3, 0.5, 18), color: 0xe9f0f8, matrix: mat4(0, 0.2, 0) },
   boxPart(3.6, 2.3, 3.0, 0xb08152, mat4(0, 1.15, 0)),
   { geo: prismGeo(3.6, 1.35, 3.0), color: 0xa87a4d, matrix: mat4(0, 2.3, 0) },
   boxPart(3.62, 0.1, 3.02, 0x8a6440, mat4(0, 1.72, 0)),                     // log seam
@@ -660,7 +677,7 @@ const chaletWindows = makeInstanced(windowGeo, new THREE.MeshBasicMaterial({ ver
 // kickers: snow wedge with curved face + orange lip flags
 function kickerGeo() {
   const parts = [];
-  const stepN = 6;
+  const stepN = 12;
   for (let i = 0; i < stepN; i++) {
     const t0 = i / stepN, t1 = (i + 1) / stepN;
     const z0 = KICK_LEN / 2 - t0 * KICK_LEN, z1 = KICK_LEN / 2 - t1 * KICK_LEN;
@@ -1003,18 +1020,18 @@ scene.add(rider);
 // Rounded character: capsules and spheres only — no boxes.
 // Board: a flattened capsule reads as a rounded deck with kicked ends.
 const boardMesh = new THREE.Mesh(mergeParts([
-  { geo: new THREE.CapsuleGeometry(0.2, 1.16, 5, 14), color: 0x153a5e, matrix: mat4(0, 0.07, 0, Math.PI / 2, 0, 0, 1, 1, 0.32) },
-  { geo: new THREE.CapsuleGeometry(0.155, 0.5, 4, 10), color: 0x2dd4bf, matrix: mat4(0, 0.115, 0, Math.PI / 2, 0, 0, 1, 1, 0.14) },
-  { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 10), color: 0x101820, matrix: mat4(0, 0.15, 0.27, 0, 0, 0, 1.2, 1, 1.5) },
-  { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 10), color: 0x101820, matrix: mat4(0, 0.15, -0.27, 0, 0, 0, 1.2, 1, 1.5) },
+  { geo: new THREE.CapsuleGeometry(0.2, 1.16, 8, 20), color: 0x153a5e, matrix: mat4(0, 0.07, 0, Math.PI / 2, 0, 0, 1, 1, 0.32) },
+  { geo: new THREE.CapsuleGeometry(0.155, 0.5, 6, 16), color: 0x2dd4bf, matrix: mat4(0, 0.115, 0, Math.PI / 2, 0, 0, 1, 1, 0.14) },
+  { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 14), color: 0x101820, matrix: mat4(0, 0.15, 0.27, 0, 0, 0, 1.2, 1, 1.5) },
+  { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 14), color: 0x101820, matrix: mat4(0, 0.15, -0.27, 0, 0, 0, 1.2, 1, 1.5) },
 ]), lambertVC);
 rider.add(boardMesh);
 
 const legs = new THREE.Mesh(mergeParts([
-  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 4, 10), color: 0xf05030, matrix: mat4(0, -0.2, 0.27) },
-  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 4, 10), color: 0xf05030, matrix: mat4(0, -0.2, -0.27) },
-  { geo: new THREE.SphereGeometry(0.115, 12, 10), color: 0x1c2b47, matrix: mat4(0, -0.42, 0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
-  { geo: new THREE.SphereGeometry(0.115, 12, 10), color: 0x1c2b47, matrix: mat4(0, -0.42, -0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
+  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 6, 14), color: 0xf05030, matrix: mat4(0, -0.2, 0.27) },
+  { geo: new THREE.CapsuleGeometry(0.088, 0.2, 6, 14), color: 0xf05030, matrix: mat4(0, -0.2, -0.27) },
+  { geo: new THREE.SphereGeometry(0.115, 16, 12), color: 0x1c2b47, matrix: mat4(0, -0.42, 0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
+  { geo: new THREE.SphereGeometry(0.115, 16, 12), color: 0x1c2b47, matrix: mat4(0, -0.42, -0.27, 0, 0, 0, 1.1, 0.75, 1.4) },
 ]), lambertVC);
 legs.position.y = 0.62;
 rider.add(legs);
@@ -1023,17 +1040,17 @@ const torso = new THREE.Group();
 torso.position.y = 0.84;
 rider.add(torso);
 torso.add(new THREE.Mesh(mergeParts([
-  { geo: new THREE.CapsuleGeometry(0.235, 0.2, 6, 14), color: 0xff5a36, matrix: mat4(0, 0, 0, 0, 0, 0, 1.03, 1, 0.8) },
-  { geo: new THREE.CylinderGeometry(0.242, 0.25, 0.1, 14), color: 0xd94a2a, matrix: mat4(0, -0.2, 0, 0, 0, 0, 1, 1, 0.78) },
-  { geo: new THREE.CylinderGeometry(0.245, 0.245, 0.09, 14), color: 0xffd23f, matrix: mat4(0, 0.07, 0, 0, 0, 0, 1, 1, 0.78) },
+  { geo: new THREE.CapsuleGeometry(0.235, 0.2, 10, 22), color: 0xff5a36, matrix: mat4(0, 0, 0, 0, 0, 0, 1.03, 1, 0.8) },
+  { geo: new THREE.CylinderGeometry(0.242, 0.25, 0.1, 22), color: 0xd94a2a, matrix: mat4(0, -0.2, 0, 0, 0, 0, 1, 1, 0.78) },
+  { geo: new THREE.CylinderGeometry(0.245, 0.245, 0.09, 22), color: 0xffd23f, matrix: mat4(0, 0.07, 0, 0, 0, 0, 1, 1, 0.78) },
 ]), lambertVC));
 
 function makeArm() {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(mergeParts([
-    { geo: new THREE.SphereGeometry(0.082, 10, 8), color: 0xff5a36, matrix: mat4(0, 0, 0) },
-    { geo: new THREE.CapsuleGeometry(0.072, 0.2, 4, 10), color: 0xff5a36, matrix: mat4(0, -0.16, 0) },
-    { geo: new THREE.SphereGeometry(0.092, 10, 8), color: 0x2f6bed, matrix: mat4(0, -0.33, 0) },
+    { geo: new THREE.SphereGeometry(0.082, 14, 10), color: 0xff5a36, matrix: mat4(0, 0, 0) },
+    { geo: new THREE.CapsuleGeometry(0.072, 0.2, 6, 14), color: 0xff5a36, matrix: mat4(0, -0.16, 0) },
+    { geo: new THREE.SphereGeometry(0.092, 14, 10), color: 0x2f6bed, matrix: mat4(0, -0.33, 0) },
   ]), lambertVC));
   return g;
 }
@@ -1046,12 +1063,12 @@ const head = new THREE.Group();
 head.position.y = 0.58;
 torso.add(head);
 head.add(new THREE.Mesh(mergeParts([
-  { geo: new THREE.SphereGeometry(0.17, 16, 14), color: 0xf5c9a2, matrix: mat4(0, 0, 0) },
-  { geo: new THREE.CapsuleGeometry(0.05, 0.17, 4, 10), color: 0x16233c, matrix: mat4(0, 0.025, -0.145, 0, 0, Math.PI / 2, 1, 1, 0.6) },
-  { geo: new THREE.CylinderGeometry(0.178, 0.182, 0.08, 16), color: 0x2f6bed, matrix: mat4(0, 0.09, 0) },
-  { geo: new THREE.CylinderGeometry(0.168, 0.176, 0.065, 16), color: 0xffd23f, matrix: mat4(0, 0.16, 0) },
-  { geo: new THREE.SphereGeometry(0.162, 14, 12), color: 0x2f6bed, matrix: mat4(0, 0.17, 0, 0, 0, 0, 1, 0.72, 1) },
-  { geo: new THREE.SphereGeometry(0.075, 10, 8), color: 0xffffff, matrix: mat4(0, 0.31, 0) },
+  { geo: new THREE.SphereGeometry(0.17, 22, 18), color: 0xf5c9a2, matrix: mat4(0, 0, 0) },
+  { geo: new THREE.CapsuleGeometry(0.05, 0.17, 6, 14), color: 0x16233c, matrix: mat4(0, 0.025, -0.145, 0, 0, Math.PI / 2, 1, 1, 0.6) },
+  { geo: new THREE.CylinderGeometry(0.178, 0.182, 0.08, 22), color: 0x2f6bed, matrix: mat4(0, 0.09, 0) },
+  { geo: new THREE.CylinderGeometry(0.168, 0.176, 0.065, 22), color: 0xffd23f, matrix: mat4(0, 0.16, 0) },
+  { geo: new THREE.SphereGeometry(0.162, 20, 16), color: 0x2f6bed, matrix: mat4(0, 0.17, 0, 0, 0, 0, 1, 0.72, 1) },
+  { geo: new THREE.SphereGeometry(0.075, 12, 10), color: 0xffffff, matrix: mat4(0, 0.31, 0) },
 ]), lambertVC));
 
 const blobShadow = new THREE.Mesh(

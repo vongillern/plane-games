@@ -1,4 +1,4 @@
-const CACHE = 'am-carve-v3';
+const CACHE = 'am-carve-v4';
 const ASSETS = [
   './',
   './index.html',
