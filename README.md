@@ -12,6 +12,12 @@ subways, and dead zones. Pure static files: no build step, no frameworks, no net
 | **Snake** | Silky-smooth modern snake | `games/snake/` |
 | **Glide** | One-tap paper-plane night flight | `games/glide/` |
 | **Carve** | Endless 3D snowboard carving (Three.js) | `games/carve/` |
+| **Span** | Build a bridge, then hold the load | `games/span/` |
+| **Runway** | Three lanes, full throttle (Three.js) | `games/runway/` |
+| **Hop** | Bounce to the edge of space | `games/hop/` |
+| **Nova** | Blast the swarm, rule the stars | `games/nova/` |
+| **Breaker** | One ball, every brick | `games/breaker/` |
+| **Sink** | Swallow the city before your rivals do (Three.js) | `games/sink/` |
 
 The hub and **each game is its own installable PWA** — visit any of them and
 "Add to Home Screen" to install just that game, or install the hub for all of them.

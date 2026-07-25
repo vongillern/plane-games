@@ -257,6 +257,22 @@ function breakerLayers(t) {
   ];
 }
 
+function sinkLayers(t) {
+  // one big opening and one big block going into it — at 48px anything smaller
+  // than this turns to noise
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  return [
+    // a white ellipse reads as the lit rim, with the opening punched over it —
+    // offset downward so the near lip catches more light than the far one
+    { sdf: sdEllipse(t(256), t(306), t(176), t(112)), color: solid('#ffffff', 238) },
+    { sdf: sdEllipse(t(256), t(296), t(164), t(102)), color: solid('#1a060b', 255) },
+    // a block tipping over the far lip, drawn as three faces
+    { sdf: p([[236, 214], [330, 176], [400, 208], [306, 246]]), color: gradient('#ffffff', '#ffd0d0', t(236), t(176), t(400), t(246)) },
+    { sdf: p([[236, 214], [306, 246], [306, 322], [236, 290]]), color: solid('#e8b8b8', 240) },
+    { sdf: p([[306, 246], [400, 208], [400, 284], [306, 322]]), color: solid('#c08d8d', 240) },
+  ];
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -290,6 +306,9 @@ const APPS = [
   },
   {
     dir: 'games/carve', bg0: '#0b3f38', bg1: '#2dd4bf', art: carveLayers,
+  },
+  {
+    dir: 'games/sink', bg0: '#4a0d10', bg1: '#ef4444', art: sinkLayers,
   },
 ];
 
