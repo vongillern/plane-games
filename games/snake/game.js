@@ -1,5 +1,6 @@
 import { installPause } from './pause.js';
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 // Snake — offline PWA. Vanilla ES module.
 // The differentiator: the snake steps on a fixed grid timer but every frame
 // interpolates between grid cells, so the body glides as one continuous ribbon.
@@ -499,6 +500,16 @@ boardEl.addEventListener('pointercancel', () => { ptr = null; });
 boardEl.addEventListener('dblclick', (e) => e.preventDefault());
 boardEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
+// The board is a square in the middle of a tall screen, so more than half the
+// display was dead on the start and game-over screens. The primary verb gets
+// the whole screen; the board keeps the swipe. The shared controls (install,
+// pause, update) all stop propagation, so they never reach this.
+addEventListener('pointerdown', (e) => {
+  if (boardEl.contains(e.target)) return;
+  if (state === 'ready') startPlaying();
+  else if (state === 'dead') restart();
+});
+
 // ---- Boot -----------------------------------------------------------------
 best = loadBest();
 bestEl.textContent = best;
@@ -511,3 +522,4 @@ requestAnimationFrame(frame);
 // ---- Service worker -------------------------------------------------------
 // update.js registers the service worker and owns the update prompt
 installUpdates({ canShow: () => state !== 'playing' });
+installPrompt();

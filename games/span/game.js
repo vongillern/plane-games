@@ -1,5 +1,6 @@
 import { installPause } from './pause.js';
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 // Span — a bridge builder. Offline PWA, vanilla ES module.
 // Build with drags, test with deterministic Verlet physics (see physics.js).
 
@@ -1132,33 +1133,7 @@ window.__test = {
 };
 
 // ---- Install button (per spec) -------------------------------------------------
-(() => {
-  const btn = document.getElementById('install');
-  const tip = document.getElementById('install-tip');
-  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let deferred = null;
-  addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferred = e;
-    btn.hidden = false;
-  });
-  if (isIOS) btn.hidden = false;
-  btn.addEventListener('click', async () => {
-    if (deferred) {
-      deferred.prompt();
-      const { outcome } = await deferred.userChoice;
-      if (outcome === 'accepted') btn.hidden = true;
-      deferred = null;
-    } else {
-      tip.hidden = false;
-    }
-  });
-  document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
-  tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
-  addEventListener('appinstalled', () => { btn.hidden = true; });
-})();
+installPrompt();
 
 // ---- Boot ----------------------------------------------------------------------
 level = LEVELS[0];

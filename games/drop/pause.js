@@ -102,8 +102,8 @@ const ICON = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
 
 export function installPause(opts = {}) {
   const canPause = opts.canPause || (() => true);
-  const top = opts.top == null ? 14 : opts.top;
-  const right = opts.right == null ? 14 : opts.right;
+  let top = opts.top == null ? 14 : opts.top;
+  let right = opts.right == null ? 14 : opts.right;
 
   const style = document.createElement('style');
   style.textContent = CSS;
@@ -119,8 +119,17 @@ export function installPause(opts = {}) {
   btn.className = 'pz-btn';
   btn.setAttribute('aria-label', 'Pause');
   btn.innerHTML = ICON;
-  btn.style.top = `calc(env(safe-area-inset-top) + ${top}px)`;
-  btn.style.right = `calc(env(safe-area-inset-right) + ${right}px)`;
+  // `top`/`right` are VIEWPORT-relative, in px. A game that letterboxes its
+  // world into a frame must add the frame's own offset, and re-`place()` on
+  // resize — otherwise the button drifts onto whatever HUD sits inside that
+  // frame (which is exactly how it ended up on Nova's lives row).
+  function place(t, r) {
+    if (t != null) top = t;
+    if (r != null) right = r;
+    btn.style.top = `calc(env(safe-area-inset-top) + ${top}px)`;
+    btn.style.right = `calc(env(safe-area-inset-right) + ${right}px)`;
+  }
+  place();
 
   const veil = document.createElement('div');
   veil.className = 'pz-veil';
@@ -212,6 +221,6 @@ export function installPause(opts = {}) {
 
   return {
     get active() { return active; },
-    pause, resume, toggle,
+    pause, resume, toggle, place,
   };
 }

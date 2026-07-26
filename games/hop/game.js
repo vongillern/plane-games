@@ -1,5 +1,6 @@
 import { installPause } from './pause.js';
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 // Hop — a doodle-jump-style vertical bouncer.
 // Airplane Mode collection. Fully offline, canvas 2D.
 // The hook: the whole world's palette + atmosphere shifts continuously with
@@ -1062,36 +1063,7 @@ requestAnimationFrame(frame);
 // update.js registers the service worker and owns the update prompt
 installUpdates({ canShow: () => state !== 'playing' });
 
-// ---------------------------------------------------------------------------
-// Install prompt
-// ---------------------------------------------------------------------------
-(() => {
-  const btn = document.getElementById('install');
-  const tip = document.getElementById('install-tip');
-  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let deferred = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferred = e;
-    btn.hidden = false;
-  });
-  if (isIOS) btn.hidden = false;
-  btn.addEventListener('click', async () => {
-    if (deferred) {
-      deferred.prompt();
-      const { outcome } = await deferred.userChoice;
-      if (outcome === 'accepted') btn.hidden = true;
-      deferred = null;
-    } else {
-      tip.hidden = false;
-    }
-  });
-  document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
-  tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
-  window.addEventListener('appinstalled', () => { btn.hidden = true; });
-})();
+installPrompt();
 
 // ---------------------------------------------------------------------------
 // Test hook — tiny surface for headless verification (no effect on play).

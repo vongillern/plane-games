@@ -1,5 +1,6 @@
 import { installPause } from './pause.js';
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 // Breaker — a polished brick-breaker. Airplane Mode collection.
 // Fully offline, canvas 2D. Sub-stepped swept physics so the ball never
 // tunnels through bricks or the paddle; every glow is pre-rendered to a
@@ -28,6 +29,7 @@ const BALL_R = 6;
 const STEP = 3.5;                // max physics substep (u) — < BALL_R, no tunneling
 const MAX_BOUNCE = 1.08;         // rad from vertical off the paddle (~62°)
 const MIN_VY = 0.22;             // min |dy| of the unit direction — never horizontal
+const MIN_VX = 0.06;             // min |dx| off the paddle — never a vertical loop
 const KEY_PADDLE_SPEED = 560;    // u/s while holding an arrow key
 const SPEED_RAMP = 7;            // u/s gained per second within a level
 const POWERUP_FALL = 150;        // u/s
@@ -754,6 +756,14 @@ function collidePaddle(b) {
   const a = rel * MAX_BOUNCE;
   b.dx = Math.sin(a);
   b.dy = -Math.cos(a);
+  // A dead-centre hit gives dx exactly 0, and since the bounce angle comes
+  // only from `rel`, a paddle that tracks the ball perfectly reproduces it
+  // forever: the ball bounces straight up and down and the game never ends.
+  // clampDir guards the mirror case (a too-flat dy) but not this one.
+  if (Math.abs(b.dx) < MIN_VX) {
+    const sx = b.dx === 0 ? (Math.random() < 0.5 ? -1 : 1) : Math.sign(b.dx);
+    b.dx = sx * MIN_VX;
+  }
   b.y = paddle.y - hh - BALL_R - 0.5;
   paddle.flash = 1;
   clampDir(b);
@@ -1130,36 +1140,7 @@ requestAnimationFrame(frame);
 // update.js registers the service worker and owns the update prompt
 installUpdates({ canShow: () => state !== 'playing' && state !== 'serve' });
 
-// ---------------------------------------------------------------------------
-// Install prompt
-// ---------------------------------------------------------------------------
-(() => {
-  const btn = document.getElementById('install');
-  const tip = document.getElementById('install-tip');
-  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let deferred = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferred = e;
-    btn.hidden = false;
-  });
-  if (isIOS) btn.hidden = false;
-  btn.addEventListener('click', async () => {
-    if (deferred) {
-      deferred.prompt();
-      const { outcome } = await deferred.userChoice;
-      if (outcome === 'accepted') btn.hidden = true;
-      deferred = null;
-    } else {
-      tip.hidden = false;
-    }
-  });
-  document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
-  tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
-  window.addEventListener('appinstalled', () => { btn.hidden = true; });
-})();
+installPrompt();
 
 // ---------------------------------------------------------------------------
 // Test hook — tiny surface for headless verification (no effect on play).

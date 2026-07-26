@@ -1,4 +1,4 @@
-const CACHE = 'am-hub-v14';
+const CACHE = 'am-hub-v15';
 
 const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker', 'carve', 'sink'];
 const GAME_FILES = [
@@ -16,6 +16,7 @@ const ASSETS = [
   './',
   './index.html',
   './update.js',
+  './install.js',
   './style.css',
   './manifest.webmanifest',
   './icon-192.png',
@@ -33,6 +34,7 @@ const NO_PAUSE = ['2048'];
 for (const g of GAMES) {
   for (const f of GAME_FILES) ASSETS.push('./games/' + g + '/' + f);
   ASSETS.push('./games/' + g + '/update.js');
+  ASSETS.push('./games/' + g + '/install.js');
   if (NO_PAUSE.indexOf(g) === -1) ASSETS.push('./games/' + g + '/pause.js');
 }
 
@@ -57,7 +59,9 @@ function offlineFallback(req) {
   if (!isPage) return Response.error();
   const m = new URL(req.url).pathname.match(/\/games\/([^/]+)(\/|$)/);
   const page = m ? './games/' + m[1] + '/index.html' : './index.html';
-  return caches.match(page).then((hit) => hit || caches.match('./index.html'));
+  return caches.match(page)
+    .then((hit) => hit || caches.match('./index.html'))
+    .then((hit) => hit || Response.error());
 }
 
 self.addEventListener('fetch', (e) => {

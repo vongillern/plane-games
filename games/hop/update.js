@@ -197,10 +197,22 @@ export function installUpdates(opts = {}) {
     }
   }
 
+  // A floating pill wants the same bottom-centre real estate as "tap to
+  // start". On a short viewport — landscape, or an SE-sized phone — it lands
+  // squarely on the primary verb, and tapping it checks for updates instead
+  // of starting the game. There is no z-index that fixes this (game overlays
+  // range from 2 to 10, so no single value sits reliably under all of them),
+  // so the control simply stands down when there isn't room for both.
+  // The hub is exempt: it mounts inline in a scrolling footer.
+  const MIN_H = 600;
+  function hasRoom() {
+    return !!opts.mount || innerHeight >= MIN_H;
+  }
+
   function paint() {
     dock.classList.toggle('ready', ready);
     dock.classList.toggle('busy', busy);
-    dock.classList.toggle('on', !!canShow());
+    dock.classList.toggle('on', !!canShow() && hasRoom());
     if (flash) return;
     if (ready) label.textContent = 'Update ready · Reload';
     else if (busy) label.textContent = 'Checking…';
