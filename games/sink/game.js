@@ -752,30 +752,22 @@ function makeGroundMaterial(tex) {
   return mat;
 }
 
-// the shaft you see down through the opening: an inward-facing cone, darkening
-// with depth, capped so you never see daylight through the bottom
+// the shaft you see down through the opening: an inward-facing cone, capped so
+// you never see daylight through the bottom. It is flat black — a hole is an
+// absence, and any wall shading at all made it read as a grey bowl painted on
+// the ground rather than a pit. Unlit and unfogged, so a hole across the
+// arena is exactly as black as the one at your feet, and the props tumbling
+// down it are the only thing in there catching light.
 function makeShaftGeo() {
   const g = new THREE.CylinderGeometry(1, 0.72, 1, 28, 4, true);
   g.translate(0, -0.5, 0);
-  const pos = g.attributes.position;
-  const col = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const t = clamp(-pos.getY(i), 0, 1);
-    // from this camera angle a small hole shows mostly the top of the far
-    // wall, so the top has to already be dark or the pit reads as a grey disc
-    const v = lerp(0.11, 0.008, Math.pow(t, 0.35));
-    col[i * 3] = v * 1.05;
-    col[i * 3 + 1] = v;
-    col[i * 3 + 2] = v * 1.12;
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 }
 
 const SHAFT_GEO = makeShaftGeo();
-const SHAFT_MAT = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide });
+const SHAFT_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide, fog: false });
 const CAP_GEO = new THREE.CircleGeometry(0.72, 28).rotateX(-Math.PI / 2);
-const CAP_MAT = new THREE.MeshBasicMaterial({ color: 0x05050a });
+const CAP_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false });
 // RingGeometry's own UVs are square-mapped; re-map them radially so a simple
 // 1D gradient fades outward from the rim
 function radialRing(inner, outer, seg) {
@@ -860,6 +852,10 @@ let groundTex = null;
 let groundMesh = null;
 const meshesByKind = {};
 const objs = [];
+// everything tall enough to be worth hiding behind — the occluder pass walks
+// this directly rather than the broadphase grid, which only ever knew where a
+// prop's footprint was
+const tall = [];
 let grid = [];
 let disposables = [];
 
@@ -916,6 +912,7 @@ function disposeWorld() {
   disposables = [];
   world.clear();
   objs.length = 0;
+  tall.length = 0;
   falling.length = 0;
   wobbling.length = 0;
   fading.clear();
@@ -1042,9 +1039,10 @@ function buildWorld(def) {
         state: 0, vy: 0, vx: 0, vz: 0, tiltX: 0, tiltZ: 0, spin: 0, wob: 0,
         tilt: 0, av: 0, tipping: 0, tipRate: 0, axX: 0, axZ: 0, swirl: 0,
         fade: 1, fadeT: 1, fmark: -1,
-        fscale: 1, hole: null,
+        fscale: 1, hole: null, counted: 0,
       };
       objs.push(o);
+      if (o.h >= FADE_MIN_H) tall.push(o);
       grid[gridIdx(x, z)].push(o);
       writeMatrix(o);
       _col.set('#ffffff').multiplyScalar(rand(0.86, 1.1));
@@ -1232,21 +1230,28 @@ function removeFromGrid(o) {
 // over the edge, *then* falls — and once it's in the shaft it spirals down the
 // wall rather than sliding down a drainpipe. Everything below is scaled by the
 // prop's size, so a bench whips over and a tower groans.
+//
+// What it must never do is *hover*. The ground under it is already gone by the
+// time this runs, so it leaves with weight: a real downward push, full gravity
+// from the first frame, and only a nudge inward. Starting from rest and easing
+// gravity in is what used to make props look untethered — sliding across the
+// opening for a beat before remembering to fall.
 function startFall(o, h) {
   o.state = 1;
   o.hole = h;
+  o.counted = 0;
   const dx = h.x - o.x, dz = h.z - o.z;
   const d = Math.max(0.001, Math.hypot(dx, dz));
   const nx = dx / d, nz = dz / d;
 
   // heavy things carry their weight into the pit; light things get flung
   const heft = clamp(o.r / 3.2, 0.12, 1);
-  const kick = lerp(3.4, 1.1, heft);
+  const kick = lerp(1.7, 0.55, heft);
   // inherit a share of the hole's own motion — being swallowed by a moving
   // hole should throw you the way it's travelling
   o.vx = nx * kick * rand(0.7, 1.15) + h.vx * 0.3;
   o.vz = nz * kick * rand(0.7, 1.15) + h.vz * 0.3;
-  o.vy = 0;
+  o.vy = -lerp(2.6, 1.0, heft) * rand(0.85, 1.15);
 
   // tangential kick: which way it swirls depends on which side of centre it
   // went in, so the shaft reads as a funnel and not a chute
@@ -1273,9 +1278,19 @@ function startFall(o, h) {
   removeFromGrid(o);
   falling.push(o);
 
+  // the dust belongs to the collapse, which happens now; the points do not
+  puff(o.x, o.z, o.r);
+}
+
+// Swallowed means swallowed. A prop that has only just tipped in could still
+// be sitting proud of the rim, and paying out then is what made growth feel
+// like it happened at arm's length — the hole banks it once half of it is
+// under the ground, and not before.
+function bank(o) {
+  const h = o.hole;
+  o.counted = 1;
   h.score += o.pts;
   growHole(h, o.growth * (h.isPlayer ? 1 : RIVAL_GROWTH));
-  puff(o.x, o.z, o.r);
   if (h.isPlayer) onPlayerEat(o);
 }
 
@@ -1284,15 +1299,13 @@ function updateFalling(dt) {
     const o = falling[i];
     const h = o.hole;
 
+    // gravity is never held back: the tipping phase is a torque, not a reprieve
+    o.vy -= G * dt;
     if (o.tipping) {
-      // still pivoting on the rim: the centre of mass swings out and down, so
-      // it only picks up a fraction of gravity until it's past the balance point
       o.av += o.tipRate * dt;
       o.tilt += o.av * dt;
-      o.vy -= G * 0.3 * dt;
       if (o.tilt > 1.25) o.tipping = 0;
     } else {
-      o.vy -= G * dt;
       o.tilt += o.av * dt;
       o.av *= 1 - 0.6 * dt;            // air drag on the tumble
     }
@@ -1337,12 +1350,33 @@ function updateFalling(dt) {
     o.tiltZ = -o.axX * o.tilt;
     o.rotY += o.spin * dt;
 
-    o.fscale = clamp(1 + (o.y + 8) / 20, 0.04, 1);
+    // half of it under the ground is the moment it stops being a thing on the
+    // street and starts being score
+    if (!o.counted && o.y <= -o.h * 0.5) bank(o);
 
-    if (o.y < -SHAFT_DEPTH * 0.72) {
+    // the funnel narrows with depth, so anything still riding it down tapers —
+    // but only once it is a full body-length under, so nothing visibly shrinks
+    // while part of it is still standing above the rim
+    o.fscale = clamp(1 - (-o.y - o.h) / 14, 0.25, 1);
+
+    // ...and it dissolves as the last of it drops past the rim, instead of
+    // being switched off at a fixed depth. A tower and a bench both vanish at
+    // the same moment in their own fall: the moment you can no longer see them.
+    const top = o.y + o.h * o.fscale;
+    const fade = Math.min(
+      clamp(1 + top / 3.5, 0, 1),
+      clamp((o.y + SHAFT_DEPTH) / 5, 0, 1),   // and never in time to hit the floor
+    );
+    if (fade !== o.fade) {
+      o.fade = fade;
+      writeFade(o);
+    }
+
+    if (o.fade <= 0.01 || o.y < -SHAFT_DEPTH) {
       o.state = 2;
       o.mesh.setMatrixAt(o.idx, HIDE_M);
       o.mesh.instanceMatrix.needsUpdate = true;
+      if (!o.counted) bank(o);   // it is gone; it counted
       falling[i] = falling[falling.length - 1];
       falling.pop();
       continue;
@@ -1386,49 +1420,72 @@ function writeFade(o) {
   a.needsUpdate = true;
 }
 
+// Closest approach between the sightline and a prop's *whole* column — base to
+// roof, as one segment. Sampling a few heights on the axis and looking the prop
+// up by the grid cell its footprint sits in meant a tower only counted while
+// its feet were near the line; the part actually covering the hole was often
+// the part that was never asked about. `_hitS` reports how far along the
+// sightline the closest approach happened.
+let _hitS = 0;
+function rayVsColumn(cx0, cy0, cz0, ux, uy, uz, len, ox, oh, oz) {
+  const ax = cx0 - ox, az = cz0 - oz;
+  let bestD = Infinity;
+  _hitS = 0;
+
+  const consider = (s0, t0) => {
+    const s = clamp(s0, 0, len);
+    const t = clamp(t0, 0, oh);
+    const ex = ax + s * ux;
+    const ey = cy0 + s * uy - t;
+    const ez = az + s * uz;
+    const d = Math.hypot(ex, ey, ez);
+    if (d < bestD) { bestD = d; _hitS = s; }
+  };
+
+  // where the sightline passes the column's axis in plan — the usual answer,
+  // exact whenever that happens between the prop's feet and its roof
+  const hh = ux * ux + uz * uz;
+  if (hh > 1e-6) {
+    const s = clamp(-(ax * ux + az * uz) / hh, 0, len);
+    consider(s, cy0 + s * uy);
+  }
+  // ...and the two ends, for a sightline that clears the roof or dives under
+  consider((ox - cx0) * ux + (0 - cy0) * uy + (oz - cz0) * uz, 0);
+  consider((ox - cx0) * ux + (oh - cy0) * uy + (oz - cz0) * uz, oh);
+  return bestD;
+}
+
 function markOccluders(h) {
   fadeStamp++;
   const cx0 = camera.position.x, cy0 = camera.position.y, cz0 = camera.position.z;
-  let dx = h.x - cx0, dy = -cy0, dz = h.z - cz0;
+  const dx = h.x - cx0, dy = -cy0, dz = h.z - cz0;
   const len = Math.hypot(dx, dy, dz) || 1;
-  dx /= len; dy /= len; dz /= len;
-  // the tube has to cover the whole opening, not just its centre
-  const tube = h.drawR * 1.1 + 1.8;
-  const span = Math.ceil((tube + 8) / CELL);
-  const steps = 7;
-  for (let s = 1; s <= steps; s++) {
-    const t = (s / (steps + 1)) * len;
-    const sx = cx0 + dx * t, sz = cz0 + dz * t;
-    const gx = Math.floor((sx + HALF) / CELL) + 1;
-    const gz = Math.floor((sz + HALF) / CELL) + 1;
-    for (let j = gz - span; j <= gz + span; j++) {
-      if (j < 0 || j >= GRID_N) continue;
-      for (let i = gx - span; i <= gx + span; i++) {
-        if (i < 0 || i >= GRID_N) continue;
-        const bucket = grid[j * GRID_N + i];
-        for (let k = 0; k < bucket.length; k++) {
-          const o = bucket[k];
-          if (o.state !== 0 || o.h < FADE_MIN_H || o.fmark === fadeStamp) continue;
-          // closest approach of the ray to the prop's vertical axis, sampled
-          // at three heights — a tower's base can be clear while its top is not
-          let near = 1e9, proj = 0;
-          for (let q = 0; q < 3; q++) {
-            const py = o.h * (0.15 + q * 0.35);
-            const ox = o.x - cx0, oy = py - cy0, oz = o.z - cz0;
-            const p = ox * dx + oy * dy + oz * dz;
-            const ex = ox - dx * p, ey = oy - dy * p, ez = oz - dz * p;
-            const e = Math.hypot(ex, ey, ez);
-            if (e < near) { near = e; proj = p; }
-          }
-          // must actually be between the camera and the hole
-          if (proj < 2 || proj > len - h.drawR * 0.5) continue;
-          if (near > tube + o.r * 0.8) continue;
-          o.fadeT = FADE_MIN;
-          o.fmark = fadeStamp;
-          fading.add(o);
-        }
-      }
-    }
+  const ux = dx / len, uy = dy / len, uz = dz / len;
+  // the sightline has to clear the whole opening, not just its centre
+  const tube = h.drawR * 1.1 + 1.6;
+  const planLen2 = dx * dx + dz * dz || 1;
+
+  // Every standing prop, every frame. A few hundred distance tests is cheaper
+  // than the broadphase that used to filter them, and it cannot miss one.
+  for (let i = 0; i < tall.length; i++) {
+    const o = tall[i];
+    if (o.state !== 0) continue;
+    const reach = o.r + tube;
+
+    // plan-view reject first: flattening can only ever shrink the gap, so
+    // anything this discards was never within `reach` in three dimensions
+    let t = ((o.x - cx0) * dx + (o.z - cz0) * dz) / planLen2;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const gx = o.x - (cx0 + dx * t), gz = o.z - (cz0 + dz * t);
+    if (gx * gx + gz * gz > reach * reach) continue;
+
+    if (rayVsColumn(cx0, cy0, cz0, ux, uy, uz, len, o.x, o.h, o.z) > reach) continue;
+    // in front of the hole, not behind it — and anything right on top of the
+    // camera stays in: that is precisely the tower whose footprint is off-screen
+    if (_hitS > len - h.drawR * 0.35) continue;
+    o.fadeT = FADE_MIN;
+    o.fmark = fadeStamp;
+    fading.add(o);
   }
 }
 
@@ -2322,4 +2379,3 @@ window.__sink = {
 
 // update.js registers the service worker and owns the update prompt
 installUpdates({ canShow: () => state !== 'playing' });
-

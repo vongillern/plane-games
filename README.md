@@ -23,6 +23,11 @@ The hub and **each game is its own installable PWA** — visit any of them and
 "Add to Home Screen" to install just that game, or install the hub for all of them.
 Once visited, everything works with the network fully off.
 
+Whichever one you launched is the one that handles updates. Install the hub and
+a single control in its footer covers the whole collection; the games opened
+inside it stay quiet. Install a game on its own and it updates itself, exactly
+as if the hub weren't there.
+
 ## Run locally
 
 ```sh

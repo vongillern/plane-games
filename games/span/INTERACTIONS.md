@@ -31,6 +31,8 @@ Landscape, always. Bridges are wide; the gap must get the long axis.
   behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
 - **Check for updates** → the pill at the bottom. It says *Update ready ·
   Reload* on launch when a new build is waiting; tapping reloads into it.
+  It appears only when this game is the app you launched: opened from the
+  hub, the hub does the updating for everything and this pill stays away.
   Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability

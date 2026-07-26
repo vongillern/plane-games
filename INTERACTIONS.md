@@ -13,8 +13,10 @@ cards, each card is one game, tapping it opens the game full-screen.
 - **Scroll** → the only other gesture; the page is a plain vertical scroll.
 - **Add to Home Screen** → explicit button when installable; on iOS it opens a
   share-sheet walkthrough tip instead (no beforeinstallprompt there).
-- **Check for updates** → the pill at the bottom. It says *Update ready ·
+- **Check for updates** → the pill in the footer. It says *Update ready ·
   Reload* on launch when a new build is waiting; tapping reloads into it.
+  Launched from the hub, this one control covers every game inside it — the
+  games themselves stay quiet.
   Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Discoverability

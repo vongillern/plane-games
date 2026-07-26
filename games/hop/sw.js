@@ -1,4 +1,4 @@
-const CACHE = 'am-hop-v4';
+const CACHE = 'am-hop-v5';
 
 const ASSETS = [
   './',
@@ -25,7 +25,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
+        keys.filter((k) => k.startsWith('am-hop-') && k !== CACHE).map((k) => caches.delete(k))
       ))
       .then(() => self.clients.claim())
   );
