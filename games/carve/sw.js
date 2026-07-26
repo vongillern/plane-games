@@ -1,4 +1,4 @@
-const CACHE = 'am-carve-v9';
+const CACHE = 'am-carve-v10';
 
 const ASSETS = [
   './',

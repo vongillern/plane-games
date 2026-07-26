@@ -1,4 +1,4 @@
-const CACHE = 'am-breaker-v7';
+const CACHE = 'am-breaker-v8';
 
 const ASSETS = [
   './',

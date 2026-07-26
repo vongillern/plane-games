@@ -1,4 +1,4 @@
-const CACHE = 'am-drop-v8';
+const CACHE = 'am-drop-v9';
 
 const ASSETS = [
   './',

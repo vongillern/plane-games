@@ -1203,6 +1203,10 @@ renderPickers();
 renderChallenges();
 resetGame();
 state = 'start';
+// The HUD reads a run: score 0, level 1 of 2, no power-ups. None of that is
+// true yet, and on a short screen it lands underneath the start panel — so it
+// dims here exactly as it does behind the game-over card.
+hud.classList.add('dim');
 const pause = installPause({ canPause: () => state === 'playing' });
 requestAnimationFrame(tick);
 

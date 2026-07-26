@@ -133,10 +133,20 @@ let dyingTimer = 0;
 let trailTimer = 0;
 let idleT = 0;
 
+// The gap stops narrowing at score 20 — below that it would stop being a game
+// and start being a pixel-perfect trick. Speed takes over from there instead,
+// so a good run keeps getting harder without the window ever becoming unfair.
 function curGap() {
   const startGap = H * 0.32;
   const minGap = H * 0.18;
   return Math.max(minGap, startGap - score * (H * 0.007));
+}
+
+const SPEED_FROM = 20;           // score at which the gap bottoms out
+const SPEED_MAX_MULT = 1.45;     // and where the pace tops out
+function speedMult() {
+  if (score <= SPEED_FROM) return 1;
+  return Math.min(SPEED_MAX_MULT, 1 + (score - SPEED_FROM) * 0.012);
 }
 
 function spawnTower(x) {
@@ -275,7 +285,7 @@ function checkCollision() {
 function update(dt) {
   // background scroll speed by state
   let bgSpeed;
-  if (state === PLAYING) bgSpeed = speed;
+  if (state === PLAYING) bgSpeed = speed * speedMult();
   else if (state === DYING) bgSpeed = speed * 0.35;
   else bgSpeed = speed * 0.3; // ambient drift on menus
   worldScroll += bgSpeed * dt;
@@ -304,7 +314,7 @@ function update(dt) {
     plane.angle += (target - plane.angle) * clamp(dt * 12, 0, 1);
 
     // move towers
-    for (const t of towers) t.x -= speed * dt;
+    for (const t of towers) t.x -= speed * speedMult() * dt;
     // recycle passed towers off-screen
     while (towers.length && towers[0].x + towerW < -20) towers.shift();
     // spawn

@@ -29,15 +29,19 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
 ```
 
 - **Font**: system stack only — `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`. Numerals: `font-variant-numeric: tabular-nums`.
-- **Per-game accent** (used for theme_color, glows, key surfaces):
+- **Per-game accent** (used for theme_color, glows, key surfaces). This table is
+  the source for `tools/gen-icons.mjs`, so a value that drifts from the game's
+  `--accent` ships an icon in a different colour from the app it opens — keep
+  the three in step: this list, `--accent` in `games/<g>/style.css`, and `bg1`
+  in the generator. `tools/check.mjs` warns when they disagree.
   - Hub: `#7c5cff` (violet)
   - 2048: `#f5a623` (warm amber/gold)
   - Drop: `#22d3ee` (electric cyan) on violet-tinted depth fog
   - Snake: `#34d399` (emerald)
   - Glide: `#fb7185` (coral/rose)
-  - Span: `#3b82f6` (bridge blue)
-  - Runway: `#d946ef` (fuchsia)
-  - Hop: `#84cc16` (lime)
+  - Span: `#60a5fa` (bridge blue)
+  - Runway: `#e879f9` (fuchsia)
+  - Hop: `#a3e635` (lime)
   - Nova: `#38bdf8` (electric sky blue)
   - Breaker: `#f97316` (vivid orange)
   - Carve: `#2dd4bf` (glacier teal) on sunlit alpine blues
@@ -60,8 +64,13 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
    budget), stop the gesture at the limit live — never let the user complete an
    invalid gesture and then tell them no.
 2. **Every registered input answers back.** When a legal gesture can't act
-   (blocked 2048 move, reversal swipe in Snake), respond with motion or haptic —
-   silence reads as "broken" on touch.
+   (a blocked 2048 move, a swipe into a wall), respond with motion or haptic —
+   silence reads as "broken" on touch. The exception is an input the genre has
+   already taught the player to expect nothing from: Snake ignores a 180°
+   reversal, and acknowledging it would interrupt the player's rhythm rather
+   than inform them. If you take the exception, say so in that app's
+   `INTERACTIONS.md` under "Intentional behaviors", so silence reads as a
+   decision rather than a bug.
 3. **Finger-sized targets.** Buttons ≥ 44px. Canvas hit-testing converts a
    px radius (~26px) to world units — never a fixed world radius that shrinks
    with zoom.
@@ -72,6 +81,12 @@ Imagine Steve Jobs reviewing it: if a detail doesn't earn its place, remove it.
 6. **Orientation serves the content.** Portrait by default; a wide game (Span)
    declares landscape in its manifest AND CSS-rotates in portrait browsers with
    pointer coords mapped back (see `games/span/`).
+6b. **A concrete floor, because "never breaks in landscape" is unfalsifiable.**
+   The primary verb must be visible, unobstructed and tappable at **390×844**
+   (portrait), **844×390** (landscape) and **320×568** (the smallest phone we
+   care about). Six separate overlaps hid behind the old wording — a floating
+   control sitting on "tap to start" reads as a broken game, not a busy screen.
+   Persistent chrome (pause, updates, install) counts as an obstruction.
 7. **Every app documents its interaction model** in `INTERACTIONS.md` beside its
    code: the player's mental model, each input, and how it's discovered. Read it
    before touching input code; update it when interactions change.
@@ -95,6 +110,11 @@ so a shared parent file would break `scope: "."`).
 - The card borrows the game's `--accent`, so it belongs to the game it covers.
 - Placement is per-game (`top` / `right`): the button gets out of the way of
   whatever HUD a game already has, but stays in the same corner everywhere.
+  **`top`/`right` are VIEWPORT-relative, in px.** A game that letterboxes its
+  world into a frame must add that frame's own offset and re-`place()` on
+  resize — `installPause` returns `place(top, right)` for exactly this. Nova
+  learned it the hard way: its lives row lives inside the frame, so a viewport
+  offset of 62 put the button on the hearts.
 - 2048 is the one game without it — nothing is running to freeze.
 
 ## Updates (every app)
@@ -126,6 +146,12 @@ shipped fix can sit on the server for days without a player ever seeing it.
   including the running cache version — rather than doing nothing visible.
 - It **never reloads on its own**, and it hides while a game is in play
   (`canShow`). A game in progress is not worth a silent refresh.
+- It is a fixed, bottom-centre pill at `z-index: 30` — above the game surface,
+  below the pause card. That is the same real estate "tap to start" wants, and
+  no z-index resolves it (game overlays run from 2 to 10, so nothing sits
+  reliably under all of them). Instead the control **stands down entirely below
+  600px of viewport height**, which is where the collisions were: landscape,
+  and SE-sized phones. See the responsive floor in "Touch affordances".
 - A reload must never cost a game. The action games are safe because the
   control hides during play; a turn-based one has no such moment, so **2048
   saves its position** (`am.2048.save`: board, score, whether 2048 has been
@@ -140,6 +166,35 @@ shipped fix can sit on the server for days without a player ever seeing it.
 - Each `sw.js` answers a `'version'` message with its `CACHE` name, which is
   what the control reports. Bumping that string per release (below) is what
   makes an update detectable at all.
+
+## Install prompt (every app)
+
+`install.js` — the third file copied unchanged into every app directory, for
+the same reason as `pause.js` and `update.js`. One call at boot:
+`installPrompt()`. It wires the `#install` button, the `#install-tip`
+share-sheet walkthrough, and `#install-tip-close`, which every app's markup
+already ships (`hidden` until an install is actually possible).
+
+- Chrome defers `beforeinstallprompt` and the button re-fires it. **iOS has no
+  such event**, so there the button opens the tip instead — which makes the tip
+  the only install path that exists on iOS, and worth protecting.
+- It **swallows `pointerdown`, `pointerup` and `click`** on both the button and
+  the tip. Most of these games start on `pointerdown` on a full-screen surface
+  that is an ancestor of the button, so without this, "Add to Home Screen"
+  launches the player into a running game behind the tip.
+- This used to be an IIFE pasted into twelve files — six in `index.html`, six
+  in `game.js` — and it drifted into four variants that differed in exactly
+  that tap-swallowing. Two games shipped the bug. If you find yourself copying
+  it again, put it here instead.
+
+## Audio (Carve and Sink only)
+
+Both ship a persistent 44px mute button at top-right, which is why both pass
+`right: 68` to `installPause` — the pause button sits beside it, not on it.
+State lives in `am.<game>.muted`. The other nine games have no audio at all.
+This is deliberately not a shared module: two apps is not a pattern yet. If a
+third game grows audio, promote it to `audio.js` beside the other three shared
+files rather than pasting it a third time.
 
 ## PWA checklist (every app: hub and each game)
 

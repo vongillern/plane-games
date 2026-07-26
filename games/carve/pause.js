@@ -86,6 +86,12 @@ const CSS = `
   letter-spacing: .04em;
   color: rgba(245,245,247,.45);
 }
+/* keyboard focus: a ring outside the control, in the game's own accent —
+   never for the pointer taps these controls are mostly driven by */
+.pz-btn:focus-visible, .pz-resume:focus-visible {
+  outline: 2px solid var(--pz-accent, #7c5cff);
+  outline-offset: 3px;
+}
 @keyframes pz-fade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes pz-rise {
   from { opacity: 0; transform: translateY(10px) scale(.96) }

@@ -39,6 +39,12 @@ body {
   touch-action: none;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 #scene {
   position: fixed;
   inset: 0;
@@ -388,7 +394,9 @@ body {
   justify-content: center;
   padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom);
   z-index: 10;
-  background: radial-gradient(120% 90% at 50% 38%, rgba(19, 22, 41, .35) 0%, rgba(10, 10, 15, .72) 70%);
+  /* the tower and the ball keep spinning behind this, so the scrim has to be
+     opaque enough at the centre that the wordmark isn't reading through them */
+  background: radial-gradient(120% 90% at 50% 38%, rgba(19, 22, 41, .62) 0%, rgba(10, 10, 15, .84) 70%);
   overflow-y: auto;
   opacity: 1;
   transition: opacity .26s var(--ease-out);
@@ -397,6 +405,12 @@ body {
 .overlay.hidden {
   opacity: 0;
   pointer-events: none;
+  /* A faded-out card kept its buttons in the tab order: five ball chips on the
+     game-over screen sat in front of everything on the start screen. It goes
+     `visibility: hidden` once it has finished fading — and comes back the
+     instant the class is dropped, since the rule goes with it. */
+  visibility: hidden;
+  transition: opacity .26s var(--ease-out), visibility 0s linear .26s;
 }
 
 .panel {
@@ -412,6 +426,15 @@ body {
 @keyframes rise {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* The two labelled sections of the start panel. They stack under the title,
+   and go side by side on a short screen — see the max-height block below. */
+.panel-cols,
+.panel-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .title {
@@ -494,6 +517,41 @@ body {
 }
 
 .over-stars[hidden] { display: none; }
+
+/* A short screen — a landscape phone, or an SE. The panel is the tallest thing
+   in the app, so it compacts and runs its two sections side by side rather
+   than off the bottom: there is no scrolling out of a `touch-action: none`
+   overlay whose backdrop starts the game. */
+@media (max-height: 560px) {
+  .panel { padding: 10px 0; }
+  .title { font-size: 46px; }
+  .over-score { font-size: 60px; }
+  .hint { margin-top: 10px; }
+  .section-label { margin-top: 14px; }
+  .cta { margin-top: 14px; padding: 10px 22px; }
+  .panel-cols { flex-direction: row; align-items: flex-start; gap: 24px; }
+}
+
+/* A narrow screen: five ball chips still have to hold one line — wrapping
+   costs more height than the row saves. */
+@media (max-width: 380px) {
+  .picker { gap: 5px; }
+  .ball-btn { width: 50px; padding: 5px 2px 4px; }
+  .ball-btn img { width: 38px; height: 38px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .panel,
+  .score,
+  .toast,
+  .power-chip,
+  .ball-btn.shake,
+  .install-tip { animation-duration: 1ms; transition-duration: 1ms; }
+  /* these two loop forever: at 1ms a slow pulse becomes a strobe, so they stop */
+  .cta,
+  .p-blaze { animation: none; }
+}
 
 /* Control hints: show only the variant matching the input device */
 @media (hover: hover) and (pointer: fine) {

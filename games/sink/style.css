@@ -26,6 +26,12 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
 /* ---------------------------------------------------------- HUD */
@@ -331,12 +337,26 @@ html, body {
 
 .over-board .row { background: rgba(255, 255, 255, .04); font-size: 13px; padding: 7px 10px; }
 
+/* ---------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .stick,
+  .row { transition-duration: 1ms; }
+  /* endless loops: at 1ms these are strobes, not calmer versions of themselves */
+  .cta,
+  .timer.urgent { animation: none; }
+}
+
 /* ---------------------------------------------------------- touch vs keyboard hints */
 
-.if-key { display: none; }
+/* Hide the wrong one — never restore the right one to a `display` type: that
+   would flatten a flex hint row. */
 @media (hover: hover) and (pointer: fine) {
-  .if-key { display: inline; }
   .if-touch { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .if-key { display: none; }
 }
 
 /* ---------------------------------------------------------- install */

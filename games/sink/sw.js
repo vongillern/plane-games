@@ -1,4 +1,4 @@
-const CACHE = 'am-sink-v5';
+const CACHE = 'am-sink-v6';
 
 const ASSETS = [
   './',

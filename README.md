@@ -56,7 +56,37 @@ DESIGN.md             the design language everything follows
 
 ## Adding a game
 
-Read `DESIGN.md`, add art + an entry to `tools/gen-icons.mjs`, create
-`games/<name>/` following the PWA checklist, and add a card to the hub's
-`index.html` (plus its icon in the hub `sw.js` precache list, and bump the
-hub cache version).
+Read `DESIGN.md` first. Then, in `games/<new>/`:
+
+1. `index.html` — the full head boilerplate (viewport with `viewport-fit=cover`,
+   `theme-color`, `color-scheme`, the Apple meta tags, `apple-touch-icon`,
+   manifest link, inline `html{background:#0a0a0f}`), plus the `#install` /
+   `#install-tip` / `#install-tip-close` markup.
+2. `style.css` — the `:root` token block, `--accent`, the `.if-touch`/`.if-key`
+   media queries, `env(safe-area-inset-*)` on all four sides.
+3. `game.js` — import and call `installPause`, `installUpdates`, `installPrompt`.
+4. `sw.js` — `CACHE = 'am-<new>-v1'`, an `ASSETS` array listing **every** file,
+   and the canonical body (copy any existing game's — they are identical below
+   `ASSETS`).
+5. `manifest.webmanifest` — `scope: "."`, `start_url: "."`, three icons.
+6. `update.js`, `install.js` and `pause.js` — copied **byte-identically** from
+   the root. Turn-based games skip `pause.js`; there is nothing to freeze.
+7. `INTERACTIONS.md` — required.
+
+Then, outside the game directory — this is the part that bites:
+
+8. **`sw.js` (hub)** — add to `GAMES`; add any file beyond the standard set to
+   the `ASSETS` tail (a vendored library, an extra module); add to `NO_PAUSE`
+   if turn-based; bump `am-hub-vN`.
+9. **`index.html` (hub)** — a card, plus its `.card-<new>` accent rule in the
+   hub's `style.css`.
+10. **`tools/gen-icons.mjs`** — an art function and an `APPS` entry, then
+    `node tools/gen-icons.mjs`.
+11. **`DESIGN.md`** — the accent table row, matching `--accent` exactly.
+
+Finally run `node tools/check.mjs`. It enforces every rule above that can be
+checked mechanically, and exists because missing one of them fails silently:
+forget `NO_PAUSE` for a turn-based game and the hub precaches a `pause.js`
+that doesn't exist, `cache.addAll` rejects, and **the hub's service worker
+never installs** — the whole collection loses offline support, and the only
+symptom is that the hub quietly stops updating.

@@ -290,13 +290,13 @@ const APPS = [
     dir: 'games/glide', bg0: '#6e1f38', bg1: '#fb7185', art: glideLayers,
   },
   {
-    dir: 'games/span', bg0: '#14284f', bg1: '#3b82f6', art: bridgeLayers,
+    dir: 'games/span', bg0: '#14284f', bg1: '#60a5fa', art: bridgeLayers,
   },
   {
-    dir: 'games/runway', bg0: '#3b0a45', bg1: '#d946ef', art: runwayLayers,
+    dir: 'games/runway', bg0: '#3b0a45', bg1: '#e879f9', art: runwayLayers,
   },
   {
-    dir: 'games/hop', bg0: '#1b3f22', bg1: '#84cc16', art: hopLayers,
+    dir: 'games/hop', bg0: '#1b3f22', bg1: '#a3e635', art: hopLayers,
   },
   {
     dir: 'games/nova', bg0: '#101b3f', bg1: '#38bdf8', art: novaLayers,

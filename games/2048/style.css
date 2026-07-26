@@ -45,6 +45,12 @@ body {
   -webkit-user-select: none;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .app {
   min-height: 100%;
   display: flex;
@@ -169,7 +175,6 @@ body {
   border: 1px solid var(--border);
   box-shadow: 0 0 60px -14px var(--accent-dim);
   touch-action: none;
-  outline: none;
 }
 
 /* The board's own transform is owned by game.js: every swipe tips the tray —
