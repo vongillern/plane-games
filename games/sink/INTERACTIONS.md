@@ -23,6 +23,8 @@ the player asks constantly: *am I big enough for that yet?*
   behaviour — see `pause.js` and "Pause" in `DESIGN.md`.
 - **Check for updates** → the pill at the bottom. It says *Update ready ·
   Reload* on launch when a new build is waiting; tapping reloads into it.
+  It appears only when this game is the app you launched: opened from the
+  hub, the hub does the updating for everything and this pill stays away.
   Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Clamp, don't reject
@@ -34,9 +36,10 @@ the player asks constantly: *am I big enough for that yet?*
   never kills.
 
 ## Every input answers back
-- Anything you swallow gives a dust puff at the rim, a thud pitched down
-  by the object's size, and — for anything large — a haptic tick and a
-  small camera shake.
+- Anything you swallow gives a dust puff at the rim as the ground under it
+  goes, then — once it is actually *in* — a thud pitched down by the
+  object's size, and for anything large a haptic tick and a small camera
+  shake. The score and the growth land on that same beat, not on the puff.
 - **Things too big to eat shiver** when the hole passes beneath them.
   This is the game's most important piece of feedback: without it a
   player reads "nothing happened" as a bug rather than as "not yet".
@@ -70,9 +73,27 @@ the player asks constantly: *am I big enough for that yet?*
   hole — a tower, a bus — fades to a dither until it is out of the way, so
   the pit is never hidden by the city. It is a screen-door fade, not
   blending: the props stay in the opaque pass and never need sorting.
-- Falling is a topple, not a drop. A thing overbalances on the rim, tips
-  over it, then spirals down the shaft, reflecting off the wall on the
-  way. Small props whip over; a tower groans.
+  What counts as "standing between" is **any part of the building**: the
+  test is against its whole column, base to roof, so the tower leaning
+  over your hole with its footprint off the bottom of the screen fades
+  like any other. Where its feet are has nothing to do with it.
+- **Things fall in, they do not come untethered.** The ground under a prop
+  is already gone when it goes, so it leaves with weight: full gravity and
+  a real downward push from the first frame, and only a nudge inward. It
+  overbalances on the rim, tips over it, then spirals down the shaft,
+  reflecting off the wall on the way. Small props whip over; a tower
+  groans. Each one dissolves as the last of it drops past the rim, so a
+  bench and a tower both vanish at the same moment in their own fall —
+  the moment you can no longer see them.
+- **Half of it has to be under before it counts.** A prop that has only
+  just tipped in can still be standing proud of the rim; the hole banks
+  the points and takes the growth once half of it is below the ground,
+  and not before. Swallowing a tower is a thing that takes a moment.
+- The shaft is flat black, unlit and unfogged — a hole is an absence, and
+  any wall shading at all made it read as a grey bowl painted on the
+  ground. A hole across the arena is exactly as black as the one at your
+  feet, and the props tumbling down it are the only thing in there
+  catching light.
 - Attract mode: on the start screen the rivals eat the city behind the
   panel while the camera orbits. Starting a match regenerates the world,
   so the demo never eats into your run.

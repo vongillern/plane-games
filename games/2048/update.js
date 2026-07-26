@@ -15,6 +15,21 @@
 //
 //   installUpdates({ canShow: () => state !== 'playing' });   // fixed, bottom
 //   installUpdates({ mount: document.querySelector('footer') }); // in the flow
+//
+// ---- Who owns updates ------------------------------------------------------
+//
+// Every directory here is a standalone PWA, so `games/sink/` can be installed
+// on its own — but the hub can be installed too, and then the games are just
+// pages inside it. Both were true at once: opening a game from the hub also
+// registered the game's worker, so one collection turned into twelve apps that
+// each announced their own updates on top of the hub's.
+//
+// So updates belong to whichever app you *launched*. The first page of a
+// session claims the session (sessionStorage — per tab, per installed window,
+// and it survives navigation), and anything underneath that claim goes quiet:
+// no worker of its own, no update control. Launch the hub and the hub alone
+// speaks for the collection; launch a game from its own icon and it owns
+// itself exactly as before.
 
 const CSS = `
 .up-dock {
@@ -90,8 +105,56 @@ const CSS = `
 
 const IDLE_LABEL = 'Check for updates';
 
+// this app's own directory — the scope its worker would take
+const HERE = new URL('./', location.href).href;
+const SHELL_KEY = 'am.shell';
+
+function shellOwner() {
+  try { return sessionStorage.getItem(SHELL_KEY) || ''; } catch (_) { return ''; }
+}
+
+function claimShell() {
+  try { sessionStorage.setItem(SHELL_KEY, HERE); } catch (_) {}
+}
+
+// A worker registered for this directory by an older build (back when every
+// game claimed one) would keep serving its own stale copy from underneath the
+// shell, and its cache would outlive it — the only thing that ever pruned it
+// was the worker being removed here. Both go.
+async function releaseOwnWorker(owner) {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const regs = await navigator.serviceWorker.getRegistrations();
+    // never strand this page offline: only stand down once the shell's own
+    // worker is registered and covering us
+    if (!regs.some((r) => r.scope === owner)) return;
+    let released = false;
+    for (const r of regs) {
+      if (r.scope === HERE) released = await r.unregister() || released;
+    }
+    if (!released || !self.caches) return;
+    const dir = HERE.replace(/\/+$/, '').split('/').pop();
+    const mine = 'am-' + dir + '-';
+    for (const k of await caches.keys()) {
+      if (k.indexOf(mine) === 0) await caches.delete(k);
+    }
+  } catch (_) {}
+}
+
+// the shape installUpdates() promises, for a page that doesn't own updates
+const QUIET = { ready: false, version: '', check() {} };
+
 export function installUpdates(opts = {}) {
   const canShow = opts.canShow || (() => true);
+
+  // A page nested under the app that was launched is not its own app for this
+  // session: the shell above it does the updating, and does it for everyone.
+  const owner = shellOwner();
+  if (owner && owner !== HERE && HERE.indexOf(owner) === 0) {
+    releaseOwnWorker(owner);
+    return QUIET;
+  }
+  claimShell();
 
   const style = document.createElement('style');
   style.textContent = CSS;

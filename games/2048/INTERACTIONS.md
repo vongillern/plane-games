@@ -20,6 +20,8 @@ globally and instantly.
 - Keyboard: arrows / WASD.
 - **Check for updates** → the pill at the bottom. It says *Update ready ·
   Reload* on launch when a new build is waiting; tapping reloads into it.
+  It appears only when this game is the app you launched: opened from the
+  hub, the hub does the updating for everything and this pill stays away.
   Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
 
 ## Motion model
@@ -62,6 +64,14 @@ compresses the whole timeline coherently.
   appears at game over.
 
 ## Intentional behaviors
+- **The game in progress survives a reload.** This is the one game with no
+  moment that is obviously safe to interrupt, so the position is written
+  (`am.2048.save`: board, score, whether 2048 has been passed) after every move
+  that settles and read back at boot — tiles placed without their spawn
+  animation, because this board is not arriving, it was always there. Taking an
+  update, swiping the app away, or having iOS reclaim the tab all cost nothing.
+  A *finished* game clears the save: the next launch is a new game, not a dead
+  board.
 - No undo — a design decision from an earlier session; keeps stakes honest.
 - Sub-threshold swipes do nothing (24px is small enough that any intentional
   flick clears it).

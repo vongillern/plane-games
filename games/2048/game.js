@@ -3,6 +3,7 @@ import { installUpdates } from './update.js';
 
 const SIZE = 4;
 const BEST_KEY = 'am.2048.best';
+const SAVE_KEY = 'am.2048.save';
 const WIN_VALUE = 2048;
 
 // ---- Motion ---------------------------------------------------------------
@@ -150,6 +151,47 @@ function loadBest() {
 
 function saveBest() {
   try { localStorage.setItem(BEST_KEY, String(best)); } catch (_) {}
+}
+
+// ---- The game in progress -------------------------------------------------
+// This one is turn-based, so unlike the action games it has no moment that is
+// obviously safe to interrupt — and a reload (an update, a swipe-away, a
+// backgrounded tab reclaimed by iOS) would otherwise cost the whole board.
+// The position is written after every move that settles, and read back at
+// boot. Only what the model actually owns is stored: the board, the score, and
+// whether 2048 has already been passed. Everything visual rebuilds from that.
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v: 1,
+      score,
+      won,
+      cells: cells.map((row) => row.map((t) => (t ? t.value : 0))),
+    }));
+  } catch (_) {}
+}
+
+// a finished game is not worth resuming: clearing it is what makes the next
+// launch a new game rather than a board with nowhere left to move
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
+}
+
+function readSave() {
+  let s = null;
+  try { s = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (_) {}
+  if (!s || s.v !== 1 || !Array.isArray(s.cells) || s.cells.length !== SIZE) return null;
+  let filled = 0;
+  for (const row of s.cells) {
+    if (!Array.isArray(row) || row.length !== SIZE) return null;
+    for (const v of row) {
+      if (!v) continue;
+      // a value that isn't a power of two ≥ 2 didn't come from this game
+      if (!Number.isFinite(v) || v < 2 || (v & (v - 1)) !== 0) return null;
+      filled++;
+    }
+  }
+  return filled ? s : null;
 }
 
 function withinBounds(p) {
@@ -454,6 +496,30 @@ function reset() {
   measure();
   spawnTile(D1);
   spawnTile(D1);
+  saveGame();
+}
+
+// Pick up exactly where the last session stopped. The tiles are placed without
+// their spawn animation: this board is not arriving, it was always there.
+function restore() {
+  const s = readSave();
+  if (!s) return false;
+  gen++;
+  tilesEl.replaceChildren();
+  fxEl.replaceChildren();
+  labelEl.replaceChildren();
+  cells = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+  tiles = new Map();
+  won = !!s.won;
+  animating = false;
+  uid = 0;
+  queuedDir = null;
+  rushNext = false;
+  setScore(Number.isFinite(s.score) && s.score > 0 ? Math.floor(s.score) : 0);
+  hideOverlay();
+  measure();
+  s.cells.forEach((row, y) => row.forEach((v, x) => { if (v) makeTile(v, x, y, false); }));
+  return true;
 }
 
 function spawnTile(D) {
@@ -646,10 +712,14 @@ function move(dir) {
 
     animating = false;
 
+    // the board has settled: this is the position worth resuming from. `won`
+    // is set first, or a resumed game would celebrate 2048 a second time.
+    if (justWon) won = true;
+    if (dead) clearSave(); else saveGame();
+
     if (justWon || dead) {
       queuedDir = null;
-      if (justWon) won = true;
-      else { navigator.vibrate?.(30); boardShudder(); }
+      if (!justWon) { navigator.vibrate?.(30); boardShudder(); }
       const show = justWon ? showWin : showGameOver;
       window.setTimeout(() => { if (g === gen) show(); }, D(MOTION.overlayIn));
     } else if (queuedDir) {
@@ -776,7 +846,7 @@ boardEl.addEventListener('contextmenu', (e) => e.preventDefault());
 best = loadBest();
 bestEl.textContent = best;
 measure();
-reset();
+if (!restore()) reset();
 
 // tiny test hook: lets headless tests force a near-full grid to reach
 // game-over quickly without playing out a full game. Harmless in production.

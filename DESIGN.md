@@ -104,6 +104,20 @@ shipped fix can sit on the server for days without a player ever seeing it.
 `update.js` — copied unchanged into every app directory, same reason as
 `pause.js` — makes that loop visible and puts it in the player's hands.
 
+- **One app owns updates per session — the one you launched.** Every directory
+  is installable on its own, but the hub is installable too, and then the games
+  are pages inside it. Both were true at once, so opening a game from the hub
+  also registered the game's worker: one collection behaved like twelve apps,
+  each announcing its own update on top of the hub's. The first page of a
+  session claims it (`sessionStorage`, key `am.shell` — per tab, per installed
+  window, and it survives navigation) and anything *underneath* that claim goes
+  quiet: no worker of its own, no control. Launch the hub and the hub alone
+  speaks for the collection; launch a game from its own icon and it owns itself
+  exactly as before.
+- A quiet page also **stands down a worker it registered under an older build**,
+  and drops that worker's caches — nothing else would ever prune them. It only
+  does so once the shell's own worker is registered, so it can never strand the
+  page offline.
 - It **registers the service worker** (apps no longer do it inline) and checks
   for a new one on launch.
 - One control, bottom-centre, in the app's own accent: "Check for updates"
@@ -112,6 +126,11 @@ shipped fix can sit on the server for days without a player ever seeing it.
   including the running cache version — rather than doing nothing visible.
 - It **never reloads on its own**, and it hides while a game is in play
   (`canShow`). A game in progress is not worth a silent refresh.
+- A reload must never cost a game. The action games are safe because the
+  control hides during play; a turn-based one has no such moment, so **2048
+  saves its position** (`am.2048.save`: board, score, whether 2048 has been
+  passed) after every move that settles and restores it at boot. A finished
+  game clears the save — the next launch is a new game, not a dead board.
 - `mount` puts the control in the page flow instead of floating — the hub
   scrolls, so a fixed pill would sit on a card forever.
 - "Is this an update?" means *our* worker was already in charge, compared by
@@ -130,9 +149,10 @@ Each directory is a fully independent, installable PWA:
   `display: "standalone"`, `orientation: "portrait"` (games), `theme_color` = accent-tinted
   dark, `background_color: "#0a0a0f"`, icons: `icon-192.png`, `icon-512.png`,
   `icon-maskable-512.png` (`purpose: "maskable"`).
-- `sw.js`: versioned cache name (`<app>-v1`), precache **every** file the app uses on
+- `sw.js`: versioned cache name (`am-<app>-v1`), precache **every** file the app uses on
   install, cache-first fetch handler, delete old caches on activate. Bump version string
-  on any asset change.
+  on any asset change. Prune **only your own generations** (`k.startsWith('am-<app>-')`) —
+  a bare `k !== CACHE` sweeps away the hub's cache and every sibling's along with it.
 - Register with a **relative** path: `navigator.serviceWorker.register('./sw.js')`.
 - `<head>` must include: `viewport` with `viewport-fit=cover`, `theme-color` meta,
   `apple-touch-icon` link (192px), `apple-mobile-web-app-capable`, manifest link.
