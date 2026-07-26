@@ -1,4 +1,4 @@
-const CACHE = 'am-span-v6';
+const CACHE = 'am-span-v7';
 
 const ASSETS = [
   './',

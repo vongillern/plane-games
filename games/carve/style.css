@@ -28,6 +28,12 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 #scene {
   position: fixed;
   inset: 0;
@@ -159,6 +165,8 @@ html, body {
   padding: 24px;
   padding-top: calc(env(safe-area-inset-top) + 24px);
   padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+  padding-left: calc(env(safe-area-inset-left) + 24px);
+  padding-right: calc(env(safe-area-inset-right) + 24px);
   background: linear-gradient(180deg, rgba(8, 14, 24, .38), rgba(8, 14, 24, .55));
   z-index: 5;
   opacity: 1;
@@ -226,11 +234,22 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* touch vs keyboard hints */
-.if-key { display: none; }
+/* ---------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .mute-btn { transition-duration: 1ms; }
+  /* an endless pulse at 1ms is a strobe, not a calmer version of itself */
+  .cta { animation: none; }
+}
+
+/* touch vs keyboard hints — hide the wrong one, and never restore the right
+   one to a `display` type: that would flatten a flex hint row */
 @media (hover: hover) and (pointer: fine) {
-  .if-key { display: inline; }
   .if-touch { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .if-key { display: none; }
 }
 
 /* ---------------------------------------------------------- install */
@@ -262,6 +281,8 @@ html, body {
   justify-content: center;
   padding: 20px;
   padding-bottom: calc(env(safe-area-inset-bottom) + 28px);
+  padding-left: calc(env(safe-area-inset-left) + 20px);
+  padding-right: calc(env(safe-area-inset-right) + 20px);
   background: rgba(0, 0, 0, .45);
 }
 .install-tip-card {

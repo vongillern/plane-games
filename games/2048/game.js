@@ -48,9 +48,14 @@ const EASE_SPRING = 'cubic-bezier(.22, 1.2, .36, 1)';
 const EASE_OUT    = 'cubic-bezier(.16, 1, .3, 1)';
 
 // ---- Tile visual ramp ----------------------------------------------------
+// 2 and 4 sit against an empty cell of roughly #1e1e2a. At #2b2822/#3a3327
+// they read as empty cells with a numeral floating on them, so you could not
+// scan board occupancy at a glance — which is the whole skill of the game.
+// Lifted until the tile is legible as a tile, while staying clearly the cool,
+// unearned end of the ramp that turns warm from 8 upward.
 const TILE_STYLES = {
-  2:    { bg: '#2b2822', fg: '#f5f5f7' },
-  4:    { bg: '#3a3327', fg: '#f5f5f7' },
+  2:    { bg: '#3b3730', fg: '#f5f5f7' },
+  4:    { bg: '#574c39', fg: '#f5f5f7' },
   8:    { bg: '#b9803a', fg: '#1a1408' },
   16:   { bg: '#dd8f38', fg: '#1a1408' },
   32:   { bg: '#ec7f2e', fg: '#1a1408' },

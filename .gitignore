@@ -1,0 +1,15 @@
+# Airplane Mode ships no dependencies: there is no package.json here, and there
+# must not be one. tools/smoke.mjs resolves playwright-core ad hoc, so an
+# `npm i --no-save --prefix tools playwright-core` leaves these behind.
+node_modules/
+package-lock.json
+
+# macOS / Windows
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+*~

@@ -45,6 +45,12 @@ const CAM_FAR_D = 82;
 const CAM_R_FAR = 17;              // hole radius at which the camera is fully out
 const FOV = 55;
 
+// The camera shake — an edge bump, a swallow — is the one thing here a
+// vestibular-sensitive player must not get. Scaling it where it is *read*
+// leaves every site that sets it alone.
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const JOLT = REDUCED ? 0 : 1;
+
 const EAT_HOLE_RATIO = 1.15;       // how much bigger you must be to swallow a rival
 const EAT_PLAYER_RATIO = 1.45;     // ...and how much bigger a rival must be to take
                                    // you: the house tilts the table your way
@@ -1729,7 +1735,7 @@ function updateCamera(dt) {
   camera.position.copy(camTarget).addScaledVector(camDir, camDist);
   if (shake > 0) {
     shake = Math.max(0, shake - dt * 2.6);
-    const k = shake * shake * 0.7;
+    const k = shake * shake * 0.7 * JOLT;
     camera.position.x += Math.sin(tNow * 61) * k;
     camera.position.y += Math.sin(tNow * 47) * k;
   }

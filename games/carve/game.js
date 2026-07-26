@@ -42,6 +42,12 @@ const BASE_FOV = 60;
 const BEST_KEY = 'am.carve.best';
 const MUTE_KEY = 'am.carve.muted';
 
+// The camera jolts — shake on a landing or a clip, the FOV punch off a kicker —
+// are the one thing here a vestibular-sensitive player must not get. Scaling
+// them where they are *read* leaves every site that adds to them alone.
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const JOLT = REDUCED ? 0 : 1;
+
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
@@ -899,8 +905,13 @@ function generateTo(sMax) {
     if (nextKickerS > 90) spawnKicker(nextKickerS);
     nextKickerS += rand(115, 175);
   }
+  // The first obstacle used to wait until 60m — at START_V that is three and a
+  // half seconds of empty groomer before the game asks anything of you, long
+  // enough to wonder whether it is broken. Measured over 10 seeds: first
+  // obstacle 69.9m/3.19s -> 34.2m/1.73s, and the opening stays sparse (every
+  // row in the first 100m places exactly one obstacle, >2.6m off the corridor).
   while (nextObstacleS < sMax) {
-    if (nextObstacleS > 60) spawnObstacleRow(nextObstacleS);
+    if (nextObstacleS > 28) spawnObstacleRow(nextObstacleS);
     // spacing is in metres but difficulty is felt in seconds: the run is ~25%
     // quicker than it was, so the rows move ~25% further apart to match
     nextObstacleS += rand(8, 12);
@@ -1749,20 +1760,21 @@ function updateCamera(dt) {
   camY = camY === null ? targetCamY : damp(camY, targetCamY, 5.5, dt);
 
   camShake = Math.max(0, camShake - camShake * 4.5 * dt - 0.02 * dt);
-  const shX = camShake * 0.15 * Math.sin(elapsed * 47);
-  const shY = camShake * 0.12 * Math.sin(elapsed * 39 + 1.3);
+  const sh = camShake * JOLT;
+  const shX = sh * 0.15 * Math.sin(elapsed * 47);
+  const shY = sh * 0.12 * Math.sin(elapsed * 39 + 1.3);
 
   camera.position.set(p.x * 0.78 + shX, camY + shY, -p.s + CAM_BACK);
   const lookS = p.s + 12.5;
   camera.lookAt(p.x * 0.92, baseGround(p.x * 0.92, lookS) + 1.3, -lookS);
-  camera.rotation.z += p.lean * -0.10 + camShake * 0.04 * Math.sin(elapsed * 53);
+  camera.rotation.z += p.lean * -0.10 + sh * 0.04 * Math.sin(elapsed * 53);
 
   fovKick = Math.max(0, fovKick - 9 * dt);
   const speedNorm = clamp(p.v / MAX_V, 0, 1);
   // portrait phones get a wider vertical FOV so the horizontal view still
   // spans the piste — otherwise a tall screen crops both fences out
   const aspectBoost = camera.aspect < 1 ? (1 - camera.aspect) * 17 : 0;
-  const fov = BASE_FOV + aspectBoost + 12 * speedNorm * speedNorm + fovKick;
+  const fov = BASE_FOV + aspectBoost + 12 * speedNorm * speedNorm + fovKick * JOLT;
   if (Math.abs(camera.fov - fov) > 0.05) {
     camera.fov = fov;
     camera.updateProjectionMatrix();

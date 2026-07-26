@@ -1,4 +1,4 @@
-const CACHE = 'am-glide-v7';
+const CACHE = 'am-glide-v8';
 
 const ASSETS = [
   './',

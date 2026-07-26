@@ -389,7 +389,9 @@ function renderLevelChips() {
     btn.className = 'lvl-chip';
     const isLocked = i >= unlocked;
     const isDone = best[i] !== undefined;
-    if (isLocked) btn.classList.add('locked');
+    // a locked chip does nothing when activated, so it must not be a tab stop
+    // either — `disabled` drops it from the order without changing how it looks
+    if (isLocked) { btn.classList.add('locked'); btn.disabled = true; }
     if (isDone) btn.classList.add('done');
     if (!isLocked && !isDone) btn.classList.add('next');
     btn.setAttribute('aria-label', `Level ${i + 1}: ${L.name}${isLocked ? ' (locked)' : ''}`);

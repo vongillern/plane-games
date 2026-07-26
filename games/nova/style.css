@@ -41,6 +41,12 @@ body {
   -webkit-user-select: none;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .stage {
   position: fixed;
   inset: 0;

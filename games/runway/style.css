@@ -46,6 +46,12 @@ body {
   touch-action: none;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .stage {
   position: fixed;
   inset: 0;
@@ -284,8 +290,13 @@ body {
 }
 
 .picker-btn .picker-icon {
-  font-size: 24px;
-  line-height: 1;
+  display: block;
+  line-height: 0;
+}
+
+.picker-btn .picker-icon svg {
+  width: 26px;
+  height: 26px;
 }
 
 .picker-btn.selected {

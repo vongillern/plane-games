@@ -18,6 +18,10 @@ cards, each card is one game, tapping it opens the game full-screen.
   Launched from the hub, this one control covers every game inside it — the
   games themselves stay quiet.
   Shared behaviour — see `update.js` and "Updates" in `DESIGN.md`.
+  **The hub is the one app that `mount`s this control inline** (in the footer)
+  rather than floating it: the hub scrolls, so a fixed pill would sit on top of
+  a card forever. That also exempts it from the 600px-height rule the games
+  follow — an inline control competes with nothing.
 
 ## Discoverability
 - Nothing to learn: cards look like buttons (surface, border, hover/active

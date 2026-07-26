@@ -52,6 +52,12 @@ const WALL_STEP = 0.6;                   // max support rise per frame before it
 const GRAVITY = 26;                      // fall accel when running off a train roof
 const MOVING_TRAIN_VREL = 10;            // extra approach speed of oncoming trams
 
+// The camera shake — near-misses, the crash tumble — is the one thing here a
+// vestibular-sensitive player must not get. Scaling it where it is *read*
+// leaves every site that sets it alone.
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const JOLT = REDUCED ? 0 : 1;
+
 const CAM_UP = 3.2;
 const CAM_BACK = 5.5;
 const BASE_FOV = 68;
@@ -2001,22 +2007,34 @@ function handleTapRestart() {
 // ---------------------------------------------------------------------------
 // Input
 // ---------------------------------------------------------------------------
-let downX = 0, downY = 0, downT = 0, tracking = false;
+let downX = 0, downY = 0, downT = 0, tracking = false, fired = false;
 
 canvas.addEventListener('pointerdown', (e) => {
   tracking = true;
+  fired = false;
   downX = e.clientX; downY = e.clientY; downT = performance.now();
 });
-canvas.addEventListener('pointerup', (e) => {
-  if (!tracking) return;
-  tracking = false;
-  if (gameState !== 'playing') return;
+
+// Act the moment the gesture is unambiguous, not when the finger lifts. At
+// MAX_SPEED the runner covers real ground in the time it takes to complete a
+// flick, and this is a game where reaction time *is* the skill — waiting for
+// pointerup was charging the player for their own hand speed. One action per
+// press: `fired` latches until release, so a long drag can't stack lane changes.
+function resolveSwipe(e) {
+  if (!tracking || fired || gameState !== 'playing') return;
   const dx = e.clientX - downX, dy = e.clientY - downY;
   const adx = Math.abs(dx), ady = Math.abs(dy);
   if (Math.max(adx, ady) < SWIPE_THRESHOLD) return; // tap does nothing mid-run
+  fired = true;
   if (adx > ady) changeLane(dx > 0 ? 1 : -1);
   else if (dy < 0) tryJump();
   else trySlide();
+}
+
+canvas.addEventListener('pointermove', resolveSwipe);
+canvas.addEventListener('pointerup', (e) => {
+  resolveSwipe(e);
+  tracking = false;
 });
 canvas.addEventListener('pointercancel', () => { tracking = false; });
 
@@ -2120,8 +2138,9 @@ function updateCamera(dt) {
   if (Math.abs(camera.fov - fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
 
   camShakeAmt = Math.max(0, camShakeAmt - dt * 3.2);
-  const shx = (Math.random() - 0.5) * camShakeAmt;
-  const shy = (Math.random() - 0.5) * camShakeAmt;
+  const sh = camShakeAmt * JOLT;
+  const shx = (Math.random() - 0.5) * sh;
+  const shy = (Math.random() - 0.5) * sh;
   camera.position.set(camX + shx, CAM_UP + shy + camElev, CAM_BACK);
   camera.lookAt(camX * 0.5, 1.5 + camElev * 0.85, -13);
 }

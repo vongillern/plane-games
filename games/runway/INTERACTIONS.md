@@ -21,6 +21,11 @@ full Subway-Surfers mechanics map.
   ground and into a slide.
 - **Tap during a run** → deliberately nothing (prevents accidental deaths); the
   swipe threshold is 24px.
+- Swipes **resolve the moment they cross that threshold**, not when the finger
+  lifts. At full speed the runner covers real ground during a flick, and this
+  is a game where reaction time is the whole skill — waiting for `pointerup`
+  charged the player for their own hand speed. One action per press: a latch
+  clears on release, so a long drag cannot stack lane changes.
 - **Tap anywhere** on start/game-over overlays → start / restart.
 - Keyboard: ←→↑↓ / WASD; Space, Enter or R to start/restart.
 - **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the

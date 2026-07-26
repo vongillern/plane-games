@@ -6,12 +6,18 @@ the head should turn next, thinking one or two moves ahead. Food is the goal;
 their own tail is the hazard they created.
 
 ## Inputs (touch first)
-- **Swipe on the board** → turn the head (threshold 20px, dominant axis).
+- **Swipe on the board** → turn the head (threshold 20px, dominant axis). The
+  turn lands **as the threshold is crossed**, not on release: the snake is
+  moving throughout the gesture, so waiting for the finger to lift cost a cell
+  or two on every turn. The gesture then re-arms from that point, so one
+  continuous drag can trace several turns in sequence.
 - **Turns queue two deep**, so a fast "up then left" flick sequence is honored
   exactly; a third rapid input replaces nothing (cap keeps intent readable).
 - **Tap on Ready** → start. **Swipe on Ready** → start AND apply that first
   turn (one gesture does both — no wasted input).
-- **Tap on Dead** → restart.
+- **Tap on Dead** → restart. **Tap anywhere off the board** on Ready or Dead
+  → start / restart; the board is a square on a tall screen, and the primary
+  verb gets the whole of it.
 - Keyboard: arrows / WASD, Space/Enter/R for start/restart.
 - **Pause** → the round button near the top-right, or `Esc` / `P`. Tap the
   card anywhere to resume; backgrounding the app pauses too. Shared

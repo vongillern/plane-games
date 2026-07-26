@@ -70,6 +70,11 @@ const CSS = `
   transition: transform 140ms cubic-bezier(.16,1,.3,1), color 160ms, background-color 160ms;
 }
 .up-btn:active { transform: scale(.96); }
+/* keyboard focus: a ring outside the pill, in the app's own accent */
+.up-btn:focus-visible {
+  outline: 2px solid var(--up-accent, #7c5cff);
+  outline-offset: 3px;
+}
 .up-dot {
   width: 6px;
   height: 6px;

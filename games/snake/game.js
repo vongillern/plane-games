@@ -12,9 +12,16 @@ const BEST_KEY = 'am.snake.best';
 const TOUCH = matchMedia('(hover: none), (pointer: coarse)').matches;
 
 // Speed ramp (cells per second) — gentle acceleration as the snake grows.
+// The first stretch is the tutorial; past it the board is mostly snake and the
+// difficulty comes from your own tail. SPEED_MAX used to land at 25 foods,
+// which turned everything after it into a constant-speed grind on a 289-cell
+// board — a competent player had nothing left to reach for. It keeps climbing,
+// just far more slowly, so there is always a next thing.
 const SPEED_MIN = 7.5;
 const SPEED_MAX = 13;
 const SPEED_PER_CELL = 0.22;
+const SPEED_LATE = 0.03;         // per cell beyond SPEED_MAX
+const SPEED_CAP = 17;            // past here it is no longer playable, only cruel
 const START_LEN = 3;
 
 // Bonus food.
@@ -95,7 +102,12 @@ function saveBest() {
 }
 
 function speed() {
-  return Math.min(SPEED_MAX, SPEED_MIN + (body.length - START_LEN) * SPEED_PER_CELL);
+  const grown = body.length - START_LEN;
+  const ramp = SPEED_MIN + grown * SPEED_PER_CELL;
+  if (ramp <= SPEED_MAX) return ramp;
+  // past the ramp, a much shallower climb rather than a flat line
+  const over = grown - (SPEED_MAX - SPEED_MIN) / SPEED_PER_CELL;
+  return Math.min(SPEED_CAP, SPEED_MAX + over * SPEED_LATE);
 }
 
 function stepInterval() {
@@ -471,14 +483,29 @@ boardEl.addEventListener('pointerdown', (e) => {
   ptr = { id: e.pointerId, x: e.clientX, y: e.clientY };
 });
 
+// Turn the moment the swipe is unambiguous rather than when the finger lifts.
+// The snake is moving the whole time the gesture is in flight, so resolving on
+// release charged the player for their own hand speed — at 13 cells/s that is
+// a cell or two of lag on every turn. The gesture re-arms from the release
+// point, so one continuous drag can still trace several turns in sequence.
 boardEl.addEventListener('pointermove', (e) => {
-  if (ptr && e.pointerId === ptr.id) e.preventDefault();
+  if (!ptr || e.pointerId !== ptr.id) return;
+  e.preventDefault();
+  if (state !== 'playing') return;
+  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) < SWIPE_MIN) return;
+  enqueue(adx > ady ? (dx > 0 ? DIRS.right : DIRS.left) : (dy > 0 ? DIRS.down : DIRS.up));
+  ptr.x = e.clientX;
+  ptr.y = e.clientY;
+  ptr.moved = true;
 });
 
 function endSwipe(e) {
   if (!ptr || e.pointerId !== ptr.id) return;
   const dx = e.clientX - ptr.x;
   const dy = e.clientY - ptr.y;
+  const moved = !!ptr.moved;
   ptr = null;
 
   const adx = Math.abs(dx), ady = Math.abs(dy);
@@ -490,7 +517,9 @@ function endSwipe(e) {
     return;
   }
   if (state === 'dead') { restart(); return; }
-  if (state === 'playing' && swiped) {
+  // mid-run turns already resolved live in pointermove; only a swipe that never
+  // crossed the threshold until the very last moment lands here
+  if (state === 'playing' && swiped && !moved) {
     enqueue(adx > ady ? (dx > 0 ? DIRS.right : DIRS.left) : (dy > 0 ? DIRS.down : DIRS.up));
   }
 }

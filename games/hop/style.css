@@ -41,6 +41,12 @@ body {
   -webkit-user-select: none;
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .stage {
   position: fixed;
   inset: 0;
@@ -84,6 +90,25 @@ body {
   font-size: 0.42em;
   font-weight: 700;
   color: var(--text-dim);
+}
+
+/* ---------- Pause button ----------
+   Every other game has a corner its play surface never reaches; Hop doesn't.
+   The platform field is the whole viewport, and one jump covers 300 units —
+   35% of a portrait screen, and more than all of a landscape one. The top
+   corner is still the best placement there is (it clears the band a jump can
+   reach by ~115 units in portrait and ~17 on an SE, and by nothing at all in
+   landscape), so what gives here is the disc, not the corner: it keeps its
+   size and its glyph, and drops the fill and the blur that would hide a
+   platform passing behind it.
+
+   `body >` is load-bearing — pause.js appends its own <style> after this
+   file, so a bare `.pz-btn` would lose the cascade. */
+body > .pz-btn {
+  background: rgba(22, 22, 31, .3);
+  border-color: rgba(255, 255, 255, .22);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ---------- Milestone caption ---------- */

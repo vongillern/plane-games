@@ -35,6 +35,12 @@ body {
     max(20px, env(safe-area-inset-left));
 }
 
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 main {
   width: 100%;
   max-width: 420px;
@@ -150,6 +156,14 @@ footer p {
   border-radius: 50%;
   background: #34d399;
   box-shadow: 0 0 10px rgba(52, 211, 153, .8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  main,
+  .card,
+  .chevron,
+  .install-btn,
+  .install-tip { animation-duration: 1ms; transition-duration: 1ms; }
 }
 
 /* ---- Install (Add to Home Screen) ---- */
