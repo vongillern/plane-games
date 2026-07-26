@@ -530,6 +530,9 @@ button {
 }
 
 .install-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, .18); }
+/* `display: inline-flex` above beats the [hidden] default, so the button
+   showed even when we had nothing to offer — every other app guards this */
+.install-btn[hidden] { display: none; }
 
 .install-tip {
   position: fixed;

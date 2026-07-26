@@ -1,4 +1,4 @@
-const CACHE = 'am-hop-v5';
+const CACHE = 'am-hop-v6';
 
 const ASSETS = [
   './',
@@ -6,6 +6,7 @@ const ASSETS = [
   './style.css',
   './game.js',
   './update.js',
+  './install.js',
   './pause.js',
   './manifest.webmanifest',
   './icon-192.png',
@@ -13,41 +14,48 @@ const ASSETS = [
   './icon-maskable-512.png',
 ];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE)
-      .then((cache) => cache.addAll(ASSETS))
-      .then(() => self.skipWaiting())
-  );
+// Prune this app's own generations only — a bare `k !== CACHE` sweeps away
+// the hub's cache and every sibling's along with it.
+const PREFIX = CACHE.replace(/v\d+$/, '');
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k.startsWith('am-hop-') && k !== CACHE).map((k) => caches.delete(k))
-      ))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
+// Offline and the exact URL isn't cached: a navigation falls back to this
+// app's own page, so Safari never sees a rejected respondWith. A failed
+// *subresource* must not get index.html back — the wrong MIME type turns a
+// missing module into a silent black screen, so it fails honestly instead.
+function offlineFallback(req) {
+  const isPage = req.mode === 'navigate' ||
+    (req.headers.get('accept') || '').indexOf('text/html') !== -1;
+  if (!isPage) return Response.error();
+  return caches.match('./index.html').then((hit) => hit || Response.error());
+}
 
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      if (cached) return cached;
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  e.respondWith(
+    caches.match(req, { ignoreSearch: true }).then((hit) => {
+      if (hit) return hit;
       return fetch(req)
         .then((res) => {
-          // runtime-cache same-origin GETs so the app stays fully offline
           if (res && res.ok && new URL(req.url).origin === self.location.origin) {
             const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
+            caches.open(CACHE).then((c) => c.put(req, copy));
           }
           return res;
         })
-        .catch(() => caches.match('./index.html'));
+        .catch(() => offlineFallback(req));
     })
   );
 });

@@ -1,4 +1,5 @@
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 // 2048 — offline PWA. Vanilla ES module.
 
 const SIZE = 4;
@@ -883,30 +884,4 @@ window.__test = {
 installUpdates();
 
 // ---- Install prompt ---------------------------------------------------
-(() => {
-  const btn = document.getElementById('install');
-  const tip = document.getElementById('install-tip');
-  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let deferred = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferred = e;
-    btn.hidden = false;
-  });
-  if (isIOS) btn.hidden = false;
-  btn.addEventListener('click', async () => {
-    if (deferred) {
-      deferred.prompt();
-      const { outcome } = await deferred.userChoice;
-      if (outcome === 'accepted') btn.hidden = true;
-      deferred = null;
-    } else {
-      tip.hidden = false;
-    }
-  });
-  document.getElementById('install-tip-close').addEventListener('click', () => { tip.hidden = true; });
-  tip.addEventListener('click', (e) => { if (e.target === tip) tip.hidden = true; });
-  window.addEventListener('appinstalled', () => { btn.hidden = true; });
-})();
+installPrompt();

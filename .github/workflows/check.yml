@@ -1,0 +1,20 @@
+name: check
+
+# main deploys straight to GitHub Pages, so a push-triggered run would report
+# a broken build only after it had already shipped. The protection lives here,
+# on the pull request, before the merge.
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the cache-version ratchet diffs against the merge-base
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node tools/check.mjs

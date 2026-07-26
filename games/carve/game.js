@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three.module.js';
 import { installPause } from './pause.js';
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -1829,3 +1830,4 @@ requestAnimationFrame(tick);
 
 // update.js registers the service worker and owns the update prompt
 installUpdates({ canShow: () => state !== 'playing' });
+installPrompt();

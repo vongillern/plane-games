@@ -1,6 +1,7 @@
 import { installPause } from './pause.js';
 import * as THREE from './vendor/three.module.js';
 import { installUpdates } from './update.js';
+import { installPrompt } from './install.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
@@ -2218,34 +2219,7 @@ let lastDistanceShown = -1;
 // ---------------------------------------------------------------------------
 // Install button (Add to Home Screen)
 // ---------------------------------------------------------------------------
-(() => {
-  const btn = document.getElementById('install');
-  const tip = document.getElementById('install-tip');
-  if (matchMedia('(display-mode: standalone)').matches || navigator.standalone) return;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  let deferred = null;
-  addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferred = e;
-    btn.hidden = false;
-  });
-  if (isIOS) btn.hidden = false;
-  btn.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (deferred) {
-      deferred.prompt();
-      const { outcome } = await deferred.userChoice;
-      if (outcome === 'accepted') btn.hidden = true;
-      deferred = null;
-    } else {
-      tip.hidden = false;
-    }
-  });
-  document.getElementById('install-tip-close').addEventListener('click', (e) => { e.stopPropagation(); tip.hidden = true; });
-  tip.addEventListener('pointerup', (e) => { if (e.target === tip) tip.hidden = true; });
-  addEventListener('appinstalled', () => { btn.hidden = true; });
-})();
+installPrompt();
 
 // ---------------------------------------------------------------------------
 // Boot
