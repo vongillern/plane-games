@@ -21,6 +21,7 @@
     <div id="score" class="score" aria-live="polite">0</div>
     <div class="chip-row">
       <div class="best-chip">BEST <span id="bestVal">0</span></div>
+      <div id="streak" class="streak-chip" hidden>STREAK ×<span id="streakVal">3</span></div>
     </div>
   </div>
 
@@ -36,7 +37,7 @@
       <h1 class="title">Carve</h1>
       <p class="hint">
         <span class="if-touch">drag to carve &nbsp;·&nbsp; tap to jump</span><span class="if-key">← → to carve &nbsp;·&nbsp; Space to jump</span><br>
-        <span class="hint-2"><span class="if-touch">drag while airborne to spin — land straight</span><span class="if-key">spin in the air with ← → — land straight</span></span>
+        <span class="hint-2"><span class="if-touch">in the air: drag sideways to spin, up or down to flip</span><span class="if-key">in the air: ← → to spin, ↑ ↓ to flip</span><br>land straight &nbsp;·&nbsp; grind the rails</span>
       </p>
       <div class="cta"><span class="if-touch">tap to ride</span><span class="if-key">press Space to ride</span></div>
       <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>

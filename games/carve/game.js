@@ -2,33 +2,57 @@ import * as THREE from './vendor/three.module.js';
 import { installPause } from './pause.js';
 import { installUpdates } from './update.js';
 import { installPrompt } from './install.js';
+import {
+  TAU, clamp, normAngle,
+  START_V, MAX_V, speedStep,
+  treeBody, rockBody, hitsObstacle,
+  landingVerdict, trickScore,
+  grindPoints, STREAK_ON, streakHeat,
+} from './rules.js';
 
 // ---------------------------------------------------------------------------
 // Constants / tuning
 // ---------------------------------------------------------------------------
-const TAU = Math.PI * 2;
-
 // Mountain coordinates: `s` is metres travelled down the fall line (s >= 0,
 // increasing downhill). World z = -s; world y descends with GRADE.
 const GRADE = 0.22;              // fall-line gradient (~12.5°)
 const G = 26;                    // gravity (m/s²) — tuned for arcade arcs
-const START_V = 17;              // downhill speed at the gate (m/s)
-const MAX_V = 40;                // terminal speed
-// How hard the mountain pulls. The old ramp had a ~17s time constant, so the
-// first half of every run was spent waiting to get going; this reaches cruising
-// speed in about six seconds and keeps a floor under it at the top end.
-const PULL = 0.16;               // accel = (MAX_V - v) * PULL
-const PULL_MIN = 0.9;            // ...never less than this (m/s²)
 const STEER_MAX = 0.60;          // max |vx| as a fraction of v
 const DRAG_FULL = 140;           // px of horizontal drag for full carve lock
 const SPIN_PER_PX = 0.016;       // rad of air-spin per px of drag
 const SPIN_KEY = 5.6;            // rad/s of air-spin from held arrow keys
+const FLIP_PER_PX = 0.017;       // rad of air-flip per px of vertical drag
+const FLIP_KEY = 5.2;            // rad/s of air-flip from held up/down keys
+const GRAB_HOLD = 0.42;          // s of a still finger in the air before a grab
 const OLLIE_VY = 6.2;
-const ALIGN_TOL = 0.96;          // rad (~55°) landing alignment tolerance
+
+// The rider's stance. A snowboard does sit across the direction of travel, but
+// a permanent 15° of yaw read as "the character is broken, not stylish" — a
+// whisper of it is all the stance needs, and the head cancels it so the face
+// still points down the fall line.
+const STYLE_YAW = 0.07;
+
+// A flick of the wrist throws snow. Rate of change of edge pressure, in units
+// of full-lock per second: CUT_RATE with a change of edges, or CUT_FLICK on its
+// own (well above the 3.6/s a held arrow key can ramp at).
+const CUT_RATE = 3.0;
+const CUT_FLICK = 9;
+const CUT_COOLDOWN = 0.26;
+// A flip swings the board around the rider, not the rider around the board, so
+// the visual pivots this far above the deck.
+const FLIP_PIVOT = 0.62;
 
 const PISTE_HALF = 13;           // rideable half-width
 const FENCE_X = 13.8;            // safety netting
 const SIDE_FAR = 52;             // off-piste ground extends this far
+
+// Grind rails. The uphill end tapers down to the snow, so simply riding into
+// one puts you on it — the feature teaches itself with no new input to learn.
+const RAIL_LEN = 14;             // total length (m)
+const RAIL_RAMP = 3.2;           // lead-in over which the bar rises to height
+const RAIL_H = 0.72;             // bar height above the snow on the flat part
+const RAIL_HALF = 0.55;          // how close in x you must be to catch it
+const RAIL_SNAP = 0.5;           // vertical window for catching it out of the air
 
 const CHUNK_LEN = 90;            // ground chunk length (m)
 const CHUNKS = 5;                // one behind the camera + 360 m in front
@@ -51,7 +75,6 @@ const JOLT = REDUCED ? 0 : 1;
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const damp = (a, b, k, dt) => lerp(a, b, 1 - Math.exp(-k * dt));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -126,6 +149,26 @@ function onRampLipCross(prevS, newS, x) {
   return null;
 }
 
+// Rails ride above the snow on their own straight line: the bar is planted
+// along the grade from where it starts and rises out of the snow over the
+// lead-in, so the ramp the mesh shows and the height physics uses are the same
+// linear thing.
+function railTopY(rail, s) {
+  const t = clamp((s - rail.s) / RAIL_LEN, 0, 1);
+  const rise = clamp((s - rail.s) / RAIL_RAMP, 0, 1);
+  return lerp(rail.y0, rail.y1, t) + RAIL_H * rise;
+}
+// The rail you are close enough to be riding, or null.
+function railAt(x, s, y) {
+  for (const r of rails) {
+    if (Math.abs(x - r.x) > RAIL_HALF) continue;
+    if (s < r.s || s > r.s + RAIL_LEN) continue;
+    if (Math.abs(y - railTopY(r, s)) > RAIL_SNAP) continue;
+    return r;
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Renderer / scene / camera / lights
 // ---------------------------------------------------------------------------
@@ -163,16 +206,26 @@ function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-// sky — vertical gradient used as screen-space background
-const skyTex = canvasTex(2, 512, (ctx, w, h) => {
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#3f86d4');
-  g.addColorStop(0.38, '#8fc0ef');
-  g.addColorStop(0.66, '#d5e9fa');
-  g.addColorStop(1, '#e3eefa'); // meets the fog exactly
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, w, h);
-});
+// Sky — a vertical gradient used as the screen-space background. It is
+// repainted as the light changes over a long run (see "Sundown" below), so the
+// canvas and its context are kept rather than thrown away: a 2x512 gradient
+// fill is cheap enough to redo whenever the light moves a percent.
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = 2; skyCanvas.height = 512;
+const skyCtx = skyCanvas.getContext('2d');
+const skyTex = new THREE.CanvasTexture(skyCanvas);
+skyTex.colorSpace = THREE.SRGBColorSpace;
+function paintSky(top, mid, low, base) {
+  const g = skyCtx.createLinearGradient(0, 0, 0, skyCanvas.height);
+  g.addColorStop(0, top);
+  g.addColorStop(0.38, mid);
+  g.addColorStop(0.66, low);
+  g.addColorStop(1, base); // meets the fog exactly
+  skyCtx.fillStyle = g;
+  skyCtx.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
+  skyTex.needsUpdate = true;
+}
+paintSky('#3f86d4', '#8fc0ef', '#d5e9fa', '#e3eefa');
 scene.background = skyTex;
 
 // groomed corduroy — one tile covers 4 m × 4 m
@@ -343,7 +396,10 @@ function prismGeo(w, h, d) {
 const horizon = new THREE.Group();
 scene.add(horizon);
 
+// The backdrop is unlit and painterly, so the only way the light reaches it is
+// through these two materials' colours — which is exactly how sundown tints it.
 const ridgeMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide });
+const rangeMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false });
 
 // A real 3D mountain range: a smooth ridged-noise heightfield rising from
 // the valley floor, with soft vertex normals lit by the scene sun. Snow and
@@ -426,7 +482,7 @@ const ridgeMat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, s
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setIndex(idx);
   // unlit: the baked painterly shading IS the look — smooth, never grey
-  const range = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false }));
+  const range = new THREE.Mesh(g, rangeMat);
   range.frustumCulled = false;
   horizon.add(range);
 }
@@ -508,12 +564,35 @@ forestBand(-275, -36.4, 60, 0.5, 0x3a6553, 0x4e7a68); // sparse clumps break up 
   horizon.add(m);
 }
 
-// sun + clouds
+// sun, moon, stars, clouds
+const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, transparent: true, depthWrite: false, fog: false }));
+sunSprite.scale.set(190, 190, 1);
+sunSprite.position.set(-250, 170, -640);
+horizon.add(sunSprite);
+
+// the moon takes the sun's place on the other side of the valley
+const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: sunTex, color: 0xdfe9ff, transparent: true, depthWrite: false, fog: false, opacity: 0,
+}));
+moonSprite.scale.set(96, 96, 1);
+moonSprite.position.set(300, 210, -660);
+horizon.add(moonSprite);
+
+// stars: a fixed field that fades up with the dark
+const starMat = new THREE.PointsMaterial({
+  size: 4.2, map: sprayTex, transparent: true, depthWrite: false, fog: false,
+  opacity: 0, blending: THREE.AdditiveBlending, color: 0xdfe9ff, sizeAttenuation: true,
+});
 {
-  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunTex, transparent: true, depthWrite: false, fog: false }));
-  sunSprite.scale.set(190, 190, 1);
-  sunSprite.position.set(-250, 170, -640);
-  horizon.add(sunSprite);
+  const pos = [];
+  for (let i = 0; i < 220; i++) {
+    pos.push(rand(-900, 900), rand(60, 380), rand(-900, -560));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const stars = new THREE.Points(g, starMat);
+  stars.frustumCulled = false;
+  horizon.add(stars);
 }
 const clouds = [];
 for (let i = 0; i < 8; i++) {
@@ -727,6 +806,28 @@ function kickerGeo() {
 }
 const kickersMesh = makeInstanced(kickerGeo(), lambertVC, 10);
 
+// grind rail: a steel bar on posts whose uphill end tapers into a snow lead-in.
+// Local +z is uphill, so the entry is at +RAIL_LEN/2 and the bar runs downhill.
+function railGeo() {
+  const z0 = RAIL_LEN / 2, zFlat = z0 - RAIL_RAMP;
+  const STEEL = 0x8e9cad;   // dark enough to read as a line drawn on the snow
+  const parts = [
+    { geo: new THREE.ConeGeometry(1.05, 0.42, 14), color: 0xe9f0f8, matrix: mat4(0, 0.08, z0 + 0.15) },
+    capsuleBetween([0, 0.1, z0 + 0.1], [0, RAIL_H, zFlat], 0.075, STEEL),
+    capsuleBetween([0, RAIL_H, zFlat], [0, RAIL_H, -z0], 0.075, STEEL),
+  ];
+  for (const z of [zFlat - 0.6, -1.2, -z0 + 0.7]) {
+    parts.push(boxPart(0.075, RAIL_H, 0.075, 0x51617a, mat4(0, RAIL_H / 2, z)));
+    parts.push({ geo: new THREE.ConeGeometry(0.42, 0.2, 10), color: 0xeff6fc, matrix: mat4(0, 0.05, z) });
+  }
+  // one orange marker, the same language the kicker flags speak: a feature
+  // ahead, not an obstacle
+  parts.push(boxPart(0.055, 1.0, 0.055, 0x51617a, mat4(0.5, 0.5, z0 + 0.1)));
+  parts.push(boxPart(0.3, 0.24, 0.035, 0xff6d2e, mat4(0.66, 0.9, z0 + 0.1)));
+  return mergeParts(parts);
+}
+const railsMesh = makeInstanced(railGeo(), lambertVC, 4);
+
 // ---------------------------------------------------------------------------
 // Pools / active lists
 // ---------------------------------------------------------------------------
@@ -739,9 +840,11 @@ const poolPoles = makePool(fencePoles, 200);
 const poolNets = makePool(fenceNets, 200);
 const poolChalets = makePool(chalets, 16, chaletWindows);
 const poolKickers = makePool(kickersMesh, 10);
+const poolRails = makePool(railsMesh, 4);
 
-const obstacles = [];   // { x, s, r, h, passed, pool, i }
+const obstacles = [];   // { x, s, r, solid, h, passed, pool, i }
 const kickers = [];     // { x, s }
+const rails = [];       // { x, s, y0, y1 } — s is the uphill (entry) end
 
 const Q_TMP = new THREE.Quaternion();
 const E_TMP = new THREE.Euler();
@@ -801,6 +904,7 @@ function removeObstacle(k) {
 let genS = -CHUNK_LEN;
 let nextObstacleS = 0;
 let nextKickerS = 0;
+let nextRailS = 0;
 let nextChaletS = 0;
 let corridorX = 0;
 
@@ -821,25 +925,33 @@ function spawnDecorTree(x, s, sc) {
 }
 function spawnObstacleTree(x, s, sc) {
   const i = place(poolTrees, x, baseGround(x, s) - 0.12, s, rand(0, TAU), 0, sc, false);
-  if (i >= 0) obstacles.push({ x, s, r: 0.62 * sc + 0.28, h: 99, passed: false, pool: poolTrees, i });
+  if (i >= 0) obstacles.push({ x, s, ...treeBody(sc), passed: false, pool: poolTrees, i });
 }
 function spawnObstacleRock(x, s, sc) {
   const i = place(poolRocks, x, baseGround(x, s) - 0.1, s, rand(0, TAU), 0, sc, false);
-  if (i >= 0) obstacles.push({ x, s, r: 0.72 * sc + 0.2, h: 0.95 * sc, passed: false, pool: poolRocks, i });
+  if (i >= 0) obstacles.push({ x, s, ...rockBody(sc), passed: false, pool: poolRocks, i });
 }
 
-function clearOfKickers(s) {
+// features own their stretch of piste: no obstacles on a takeoff, a landing,
+// or the length of a rail
+function clearOfFeatures(s) {
   for (const k of kickers) {
     if (s > k.s - 10 && s < k.s + 30) return false;
+  }
+  for (const r of rails) {
+    if (s > r.s - 14 && s < r.s + RAIL_LEN + 12) return false;
   }
   return true;
 }
 
 function spawnObstacleRow(s) {
   corridorX = clamp(corridorX + rand(-2.4, 2.4), -8.5, 8.5);
-  if (!clearOfKickers(s)) return;
+  if (!clearOfFeatures(s)) return;
   const d = difficulty(s);
-  const n = Math.random() < 0.72 ? (1 + (Math.random() < d * 0.85 ? 1 : 0) + (Math.random() < d * 0.4 ? 1 : 0)) : 0;
+  // Density: the piste was reading as a slalom course rather than a mountain.
+  // A row is more often empty, the third obstacle is rare even late, and the
+  // rows themselves sit further apart (see generateTo).
+  const n = Math.random() < 0.62 ? (1 + (Math.random() < d * 0.75 ? 1 : 0) + (Math.random() < d * 0.28 ? 1 : 0)) : 0;
   const placed = [];
   for (let i = 0; i < n; i++) {
     let x = 0, ok = false;
@@ -855,6 +967,10 @@ function spawnObstacleRow(s) {
 }
 
 function spawnKicker(s) {
+  // a takeoff built on top of a rail serves neither
+  for (const r of rails) {
+    if (r.s < s + 20 && r.s + RAIL_LEN > s - 20) return;
+  }
   const x = clamp(corridorX + rand(-2, 2), -8.5, 8.5);
   const yEntry = baseGround(x, s - KICK_LEN), yLip = baseGround(x, s);
   const pitch = Math.atan2(yLip - yEntry, KICK_LEN);
@@ -865,6 +981,25 @@ function spawnKicker(s) {
   for (let k = obstacles.length - 1; k >= 0; k--) {
     const o = obstacles[k];
     if (o.s > s - 12 && o.s < s + 32 && Math.abs(o.x - x) < 5) removeObstacle(k);
+  }
+}
+
+// A rail is planted in the corridor, so the line you were already riding walks
+// you onto it. Anything in the way — trees, rocks, a kicker sharing the lane —
+// loses; a rail you can't reach is worse than no rail.
+function spawnRail(s, xWanted) {
+  for (const k of kickers) {
+    if (k.s > s - 22 && k.s < s + RAIL_LEN + 22) return;
+  }
+  const x = xWanted === undefined ? clamp(corridorX + rand(-1.6, 1.6), -8, 8) : xWanted;
+  const y0 = baseGround(x, s), y1 = baseGround(x, s + RAIL_LEN);
+  const pitch = Math.atan2(y1 - y0, RAIL_LEN);
+  const i = place(poolRails, x, (y0 + y1) / 2, s + RAIL_LEN / 2, 0, pitch, 1);
+  if (i < 0) return;
+  rails.push({ x, s, y0, y1 });
+  for (let k = obstacles.length - 1; k >= 0; k--) {
+    const o = obstacles[k];
+    if (o.s > s - 14 && o.s < s + RAIL_LEN + 12 && Math.abs(o.x - x) < 5) removeObstacle(k);
   }
 }
 
@@ -905,6 +1040,11 @@ function generateTo(sMax) {
     if (nextKickerS > 90) spawnKicker(nextKickerS);
     nextKickerS += rand(115, 175);
   }
+  // rails are rarer than kickers — a treat, not furniture
+  while (nextRailS < sMax) {
+    if (nextRailS > 150) spawnRail(nextRailS);
+    nextRailS += rand(230, 340);
+  }
   // The first obstacle used to wait until 60m — at START_V that is three and a
   // half seconds of empty groomer before the game asks anything of you, long
   // enough to wonder whether it is broken. Measured over 10 seeds: first
@@ -914,7 +1054,7 @@ function generateTo(sMax) {
     if (nextObstacleS > 28) spawnObstacleRow(nextObstacleS);
     // spacing is in metres but difficulty is felt in seconds: the run is ~25%
     // quicker than it was, so the rows move ~25% further apart to match
-    nextObstacleS += rand(8, 12);
+    nextObstacleS += rand(10, 14);
   }
   while (nextChaletS < sMax) {
     if (nextChaletS > 40) spawnChaletCluster(nextChaletS);
@@ -930,11 +1070,15 @@ function recycleWorld(ps) {
   recyclePool(poolNets, minS);
   recyclePool(poolChalets, minS);
   recyclePool(poolKickers, minS - 6);
+  recyclePool(poolRails, minS - RAIL_LEN);
   for (let i = obstacles.length - 1; i >= 0; i--) {
     if (obstacles[i].s < minS) removeObstacle(i);
   }
   for (let i = kickers.length - 1; i >= 0; i--) {
     if (kickers[i].s < minS - 6) { kickers[i] = kickers[kickers.length - 1]; kickers.pop(); }
+  }
+  for (let i = rails.length - 1; i >= 0; i--) {
+    if (rails[i].s + RAIL_LEN < minS) { rails[i] = rails[rails.length - 1]; rails.pop(); }
   }
 }
 
@@ -970,6 +1114,10 @@ trail.frustumCulled = false;
 scene.add(trail);
 const trailPts = [];
 let trailLastS = -99;
+// The grooves take the streak's colour, so the line you just rode is the
+// scoreboard: cold blue snow when you are riding safe, lit accent when hot.
+const trailCold = [0.72, 0.81, 0.9];
+const trailTint = [...trailCold];
 
 function pushTrailPoint(px, ps, dirX, dirZ, width) {
   const perpX = -dirZ, perpZ = dirX;
@@ -977,6 +1125,9 @@ function pushTrailPoint(px, ps, dirX, dirZ, width) {
   trailPts.push({
     lx: px - perpX * hw, ly: baseGround(px - perpX * hw, ps) + 0.04, lz: -ps - perpZ * hw,
     rx: px + perpX * hw, ry: baseGround(px + perpX * hw, ps) + 0.04, rz: -ps + perpZ * hw,
+    // the colour is stamped in as the groove is cut, so the ribbon keeps the
+    // history of the run instead of repainting itself when a streak drops
+    cr: trailTint[0], cg: trailTint[1], cb: trailTint[2],
   });
   if (trailPts.length > TRAIL_MAX) trailPts.shift();
 }
@@ -992,8 +1143,8 @@ function updateTrailMesh() {
     const age = (n - 1 - i) / TRAIL_MAX;
     const a = clamp(0.5 * (1 - age * 1.15), 0, 1);
     const co = i * 8;
-    ca[co] = 0.72; ca[co + 1] = 0.81; ca[co + 2] = 0.9; ca[co + 3] = a;
-    ca[co + 4] = 0.72; ca[co + 5] = 0.81; ca[co + 6] = 0.9; ca[co + 7] = a;
+    ca[co] = p.cr; ca[co + 1] = p.cg; ca[co + 2] = p.cb; ca[co + 3] = a;
+    ca[co + 4] = p.cr; ca[co + 5] = p.cg; ca[co + 6] = p.cb; ca[co + 7] = a;
   }
   trailGeo.attributes.position.needsUpdate = true;
   trailGeo.attributes.color.needsUpdate = true;
@@ -1016,17 +1167,23 @@ const sprayMat = new THREE.PointsMaterial({
 const spray = new THREE.Points(sprayGeo, sprayMat);
 spray.frustumCulled = false;
 scene.add(spray);
-const sprayP = Array.from({ length: SPRAY_N }, () => ({ life: 0, max: 1, vx: 0, vy: 0, vz: 0 }));
+const sprayP = Array.from({ length: SPRAY_N }, () => ({ life: 0, max: 1, vx: 0, vy: 0, vz: 0, g: 9.5 }));
 let sprayCursor = 0;
 
-function emitSpray(x, y, z, vx, vy, vz, life) {
+// Snow is the default; a colour argument turns the same particles into rail
+// sparks or the embers a hot streak throws off the tail of the board. `float`
+// spares those from gravity so they hang like a glow instead of falling.
+function emitSpray(x, y, z, vx, vy, vz, life, col, float) {
   const i = sprayCursor;
   sprayCursor = (sprayCursor + 1) % SPRAY_N;
   const p = sprayP[i];
   p.life = life; p.max = life;
   p.vx = vx; p.vy = vy; p.vz = vz;
+  p.g = float ? 1.2 : 9.5;
   sprayPos[i * 3] = x; sprayPos[i * 3 + 1] = y; sprayPos[i * 3 + 2] = z;
-  sprayCol[i * 4] = 0.96; sprayCol[i * 4 + 1] = 0.98; sprayCol[i * 4 + 2] = 1;
+  sprayCol[i * 4] = col ? col[0] : 0.96;
+  sprayCol[i * 4 + 1] = col ? col[1] : 0.98;
+  sprayCol[i * 4 + 2] = col ? col[2] : 1;
   sprayCol[i * 4 + 3] = 0.8;
 }
 function updateSpray(dt) {
@@ -1034,7 +1191,7 @@ function updateSpray(dt) {
     const p = sprayP[i];
     if (p.life <= 0) { sprayCol[i * 4 + 3] = 0; continue; }
     p.life -= dt;
-    p.vy -= 9.5 * dt;
+    p.vy -= p.g * dt;
     p.vx *= 1 - 1.6 * dt;
     p.vz *= 1 - 1.6 * dt;
     sprayPos[i * 3] += p.vx * dt;
@@ -1054,13 +1211,25 @@ scene.add(rider);
 
 // Rounded character: capsules and spheres only — no boxes.
 // Board: a flattened capsule reads as a rounded deck with kicked ends.
+// The board gets its own material so a streak can light it up without setting
+// fire to every tree on the mountain (lambertVC is shared by all the scenery).
+const boardMat = new THREE.MeshLambertMaterial({ vertexColors: true });
 const boardMesh = new THREE.Mesh(mergeParts([
   { geo: new THREE.CapsuleGeometry(0.2, 1.16, 8, 20), color: 0x153a5e, matrix: mat4(0, 0.07, 0, Math.PI / 2, 0, 0, 1, 1, 0.32) },
   { geo: new THREE.CapsuleGeometry(0.155, 0.5, 6, 16), color: 0x2dd4bf, matrix: mat4(0, 0.115, 0, Math.PI / 2, 0, 0, 1, 1, 0.14) },
   { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 14), color: 0x101820, matrix: mat4(0, 0.15, 0.27, 0, 0, 0, 1.2, 1, 1.5) },
   { geo: new THREE.CylinderGeometry(0.1, 0.12, 0.06, 14), color: 0x101820, matrix: mat4(0, 0.15, -0.27, 0, 0, 0, 1.2, 1, 1.5) },
-]), lambertVC);
+]), boardMat);
 rider.add(boardMesh);
+
+// the streak's halo: an additive smear hugging the deck, invisible until hot
+const boardGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: sprayTex, color: 0x2dd4bf, transparent: true, depthWrite: false,
+  blending: THREE.AdditiveBlending, opacity: 0,
+}));
+boardGlow.scale.set(2.1, 1.1, 1);
+boardGlow.position.y = 0.1;
+boardMesh.add(boardGlow);
 
 // legs in a real riding stance: both knees bent toward the board's nose,
 // hips narrower than the bindings. Origin is the hip plane so the crouch
@@ -1160,6 +1329,9 @@ const AudioFX = {
     };
     this.wind = loop('lowpass', 300, 0.6);
     this.carve = loop('bandpass', 800, 0.9);
+    // steel, not snow: narrow and bright, so a grind is unmistakable with the
+    // eyes closed
+    this.grind = loop('bandpass', 2600, 7);
   },
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
   setWind(v01) {
@@ -1173,6 +1345,12 @@ const AudioFX = {
     const t = this.ctx.currentTime;
     this.carve.g.gain.setTargetAtTime(0.3 * v01, t, 0.05);
     this.carve.f.frequency.setTargetAtTime(650 + 700 * v01, t, 0.05);
+  },
+  setGrind(v01) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.grind.g.gain.setTargetAtTime(0.16 * v01, t, 0.04);
+    this.grind.f.frequency.setTargetAtTime(2100 + 1500 * v01, t, 0.04);
   },
   burst(freq, type, dur, gain, sweep) {
     if (!this.ctx) return;
@@ -1223,6 +1401,26 @@ const AudioFX = {
       o.start(t + i * 0.07); o.stop(t + i * 0.07 + 0.25);
     });
   },
+  // a streak's reward climbs a fifth every step, so the fourth trick in a row
+  // sounds higher than the third without anyone being told the rule
+  streak(n) {
+    if (!this.ctx) return;
+    const ctx = this.ctx, t = ctx.currentTime;
+    const base = 523.25 * Math.pow(1.06, Math.min(n, 12));
+    [1, 1.5, 2].forEach((mul, i) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle'; o.frequency.value = base * mul;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t + i * 0.055);
+      g.gain.linearRampToValueAtTime(0.1, t + i * 0.055 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.055 + 0.2);
+      o.connect(g).connect(this.master);
+      o.start(t + i * 0.055); o.stop(t + i * 0.055 + 0.22);
+    });
+  },
+  // a flick of the edges: short, breathy, no pitch of its own
+  swish() { this.burst(900, 'bandpass', 0.16, 0.16, 320); },
+  clank() { this.burst(2400, 'bandpass', 0.12, 0.16, 900); },
   crash() { this.thump(1.5); this.burst(260, 'lowpass', 0.5, 0.5); },
   toggle() {
     this.muted = !this.muted;
@@ -1240,8 +1438,11 @@ muteBtn.classList.toggle('muted', AudioFX.muted);
 const player = {
   s: 0, x: 0, y: 0, vy: 0, vx: 0, v: START_V,
   grounded: true, heading: 0, spin: 0, spinVis: 0, spinTotal: 0,
+  flip: 0, flipVis: 0, flipTotal: 0,
   airStart: 0, lean: 0, crouch: 0, slopePitch: 0,
   stumbleT: 0, tumbleT: 0,
+  grabT: 0, grabbed: false,
+  rail: null, railFromS: 0, railSway: 0,
 };
 let state = 'start'; // start | playing | crashed | over
 let bonus = 0;
@@ -1254,6 +1455,13 @@ let fovKick = 0;
 let jumpBufferedAt = -9;
 let camY = null;
 let overShownAt = 0;
+// A streak is anything scored back to back — a trick, a grind, a threaded near
+// miss. It survives a plain landing; a crash or a sketchy one puts it out.
+let streak = 0;
+let streakMax = 0;
+let heat = 0;            // eased streakHeat(streak): what the visuals read
+let prevSteer = 0;
+let lastCutAt = -9;
 
 const scoreEl = document.getElementById('score');
 const bestValEl = document.getElementById('bestVal');
@@ -1264,6 +1472,8 @@ const overBestEl = document.getElementById('overBest');
 const overDistEl = document.getElementById('overDist');
 const overTrickEl = document.getElementById('overTrick');
 const toastsEl = document.getElementById('toasts');
+const streakEl = document.getElementById('streak');
+const streakValEl = document.getElementById('streakVal');
 
 let shownScore = -1;
 function setScore(v) {
@@ -1272,6 +1482,57 @@ function setScore(v) {
   scoreEl.textContent = v.toLocaleString();
 }
 bestValEl.textContent = best.toLocaleString();
+
+// ---------------------------------------------------------------------------
+// Streaks
+// ---------------------------------------------------------------------------
+function showStreak() {
+  const on = streak >= STREAK_ON;
+  streakEl.hidden = !on;
+  if (on) {
+    streakValEl.textContent = streak;
+    streakEl.classList.toggle('hot', streak >= STREAK_ON + 3);
+  }
+}
+function scored(pts) {
+  bonus += pts;
+  streak++;
+  if (streak > streakMax) streakMax = streak;
+  if (streak >= STREAK_ON) AudioFX.streak(streak - STREAK_ON);
+  showStreak();
+}
+function breakStreak() {
+  if (streak >= STREAK_ON) toast(`streak ended · ${streak}`, true);
+  streak = 0;
+  showStreak();
+}
+
+// The board is the readout. Three tricks in a row and the deck starts to glow
+// accent teal, the grooves it cuts take the same colour, and embers trail off
+// the tail; keep it going and the whole thing runs gold.
+const SPARK = [1, 0.78, 0.36];
+const STREAK_COOL = new THREE.Color(0x2dd4bf);
+const STREAK_HOT = new THREE.Color(0xffb03a);
+const streakColor = new THREE.Color();
+const heatCol = [0, 0, 0];   // reused: this is read every frame at speed
+function heatColor() {
+  streakColor.copy(STREAK_COOL).lerp(STREAK_HOT, clamp(heat * 1.3 - 0.3, 0, 1));
+  heatCol[0] = streakColor.r; heatCol[1] = streakColor.g; heatCol[2] = streakColor.b;
+  return heatCol;
+}
+function updateStreakFx(dt) {
+  heat = damp(heat, state === 'playing' ? streakHeat(streak) : 0, 5, dt);
+  heatColor();
+  const pulse = 1 + 0.14 * Math.sin(elapsed * 8);
+  boardMat.emissive.copy(streakColor).multiplyScalar(heat * 0.6 * pulse);
+  boardGlow.material.opacity = heat * 0.55 * pulse;
+  boardGlow.material.color.copy(streakColor);
+  const gs = 1.7 + 0.9 * heat;
+  boardGlow.scale.set(gs, gs * 0.5, 1);
+  trailTint[0] = lerp(trailCold[0], streakColor.r, heat * 0.85);
+  trailTint[1] = lerp(trailCold[1], streakColor.g, heat * 0.85);
+  trailTint[2] = lerp(trailCold[2], streakColor.b, heat * 0.85);
+}
 
 function toast(html, minor) {
   const el = document.createElement('div');
@@ -1294,9 +1555,15 @@ function startRun() {
   player.vx = 0; player.vy = 0;
   player.grounded = true;
   player.spin = 0; player.spinVis = 0; player.spinTotal = 0;
+  player.flip = 0; player.flipVis = 0; player.flipTotal = 0;
   player.stumbleT = 0; player.tumbleT = 0;
+  player.grabT = 0; player.grabbed = false;
+  player.rail = null;
   player.y = groundYFull(player.x, player.s);
   rider.rotation.set(0, 0, 0);
+  streak = 0; streakMax = 0;
+  showStreak();
+  AudioFX.setGrind(0);
   startEl.classList.add('hidden');
   overEl.classList.add('hidden');
   setScore(0);
@@ -1321,7 +1588,9 @@ function endRun() {
   overScoreEl.textContent = total.toLocaleString();
   overBestEl.textContent = best.toLocaleString();
   overDistEl.textContent = `${Math.floor(player.s - runStartS).toLocaleString()} m`;
-  overTrickEl.textContent = bestTrickPts > 0 ? ` · best trick ${bestTrickLabel}` : '';
+  overTrickEl.textContent =
+    (bestTrickPts > 0 ? ` · best trick ${bestTrickLabel}` : '') +
+    (streakMax >= STREAK_ON ? ` · streak ×${streakMax}` : '');
   overEl.classList.remove('hidden');
   overShownAt = performance.now();
 }
@@ -1330,9 +1599,12 @@ function crash() {
   if (state !== 'playing') return;
   state = 'crashed';
   player.tumbleT = 0;
+  player.rail = null;
+  breakStreak();
   camShake = Math.min(camShake + 1, 1.3);
   AudioFX.crash();
   AudioFX.setCarve(0);
+  AudioFX.setGrind(0);
   navigator.vibrate?.(35);
   for (let i = 0; i < 90; i++) {
     emitSpray(
@@ -1345,69 +1617,105 @@ function crash() {
 // ---------------------------------------------------------------------------
 // Tricks
 // ---------------------------------------------------------------------------
-function normAngle(a) {
-  while (a > Math.PI) a -= TAU;
-  while (a < -Math.PI) a += TAU;
-  return a;
-}
-
 function takeOff(vy) {
   player.grounded = false;
+  player.rail = null;
   player.vy = vy;
   player.spinTotal = 0;
+  player.flip = 0; player.flipTotal = 0;
+  player.grabT = 0; player.grabbed = false;
   player.airStart = elapsed;
 }
 
 function land() {
-  player.grounded = true;
-  player.vy = 0;
-  const airTime = elapsed - player.airStart;
-  // nearest 180° counts as straight — riding switch is style, not a fall
-  let mis = normAngle(player.spin);
-  if (mis > Math.PI / 2) mis -= Math.PI;
-  if (mis < -Math.PI / 2) mis += Math.PI;
-  const aligned = Math.abs(mis) < ALIGN_TOL;
-  const spins = Math.round(Math.abs(player.spinTotal) / Math.PI);
-  player.spin = 0;
-  player.spinTotal = 0;
-  dragX0 = dragX; // re-anchor the carve so landing doesn't jerk sideways
+  const p = player;
+  p.grounded = true;
+  p.vy = 0;
+  const airTime = elapsed - p.airStart;
+  const v = landingVerdict(p);
+  p.spin = 0; p.spinTotal = 0;
+  p.flip = 0; p.flipTotal = 0;
+  const grabbed = p.grabbed;
+  p.grabT = 0; p.grabbed = false;
+  dragX0 = dragX; dragY0 = dragY; // re-anchor so landing doesn't jerk sideways
 
   const burst = Math.floor(clamp(airTime * 26, 8, 46));
   for (let i = 0; i < burst; i++) {
     emitSpray(
-      player.x + rand(-0.7, 0.7), player.y + 0.1, -player.s + rand(-0.5, 0.9),
+      p.x + rand(-0.7, 0.7), p.y + 0.1, -p.s + rand(-0.5, 0.9),
       rand(-3.4, 3.4), rand(1.5, 4.5), rand(-1, 4), rand(0.4, 0.9)
     );
   }
   camShake = Math.min(camShake + clamp(airTime * 0.3, 0.08, 0.5), 1.2);
   AudioFX.thump(clamp(0.4 + airTime * 0.4, 0.4, 1));
 
-  if (!aligned) {
-    player.stumbleT = 0.85;
-    player.v *= 0.68;
+  if (!v.aligned) {
+    p.stumbleT = 0.85;
+    p.v *= 0.68;
     toast('sketchy landing', true);
+    breakStreak();
     navigator.vibrate?.(20);
     return;
   }
-  let pts = 0, label = '';
-  if (spins >= 1) {
-    const deg = spins * 180;
-    pts = spins === 1 ? 40 : spins === 2 ? 100 : spins === 3 ? 180 : 100 * spins - 120;
-    label = `${deg}!`;
-  } else if (airTime > 0.85) {
-    pts = 25;
-    label = 'clean air';
-  }
+  const { label, pts } = trickScore({ ...v, airTime, grabbed });
   if (pts > 0) {
-    bonus += pts;
+    scored(pts);
     if (pts >= bestTrickPts) {
       bestTrickPts = pts;
-      bestTrickLabel = spins >= 1 ? `${spins * 180}°` : 'clean air';
+      bestTrickLabel = label;
     }
     toast(`${label} <span class="pts">+${pts}</span>`);
     AudioFX.chime();
     navigator.vibrate?.(8);
-    player.v = Math.min(player.v + 1.2, MAX_V + 2);
+    p.v = Math.min(p.v + 1.2, MAX_V + 2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Grinding
+// ---------------------------------------------------------------------------
+function mountRail(rail) {
+  const p = player;
+  p.rail = rail;
+  p.grounded = false;   // the snow is not what is holding you up any more
+  p.vy = 0;
+  p.railFromS = p.s;
+  p.railSway = 0;
+  p.spin = 0; p.spinVis = 0; p.spinTotal = 0;
+  p.flip = 0; p.flipVis = 0; p.flipTotal = 0;
+  p.grabT = 0; p.grabbed = false;
+  p.stumbleT = 0;
+  AudioFX.clank();
+  navigator.vibrate?.(6);
+}
+
+// Leaving a rail is never a fall: you either ride off the end, pop off, or lean
+// out of it. All three pay for the metres you held.
+function dismountRail(reason) {
+  const p = player;
+  if (!p.rail) return;
+  const metres = p.s - p.railFromS;
+  p.rail = null;
+  AudioFX.setGrind(0);
+  if (metres > 1.6) {
+    const pts = grindPoints(metres);
+    scored(pts);
+    if (pts >= bestTrickPts) {
+      bestTrickPts = pts;
+      bestTrickLabel = `${Math.round(metres)} m grind`;
+    }
+    toast(`grind ${Math.round(metres)}m <span class="pts">+${pts}</span>`);
+    AudioFX.chime();
+    navigator.vibrate?.(8);
+  }
+  if (reason === 'end') takeOff(3.6);
+  else if (reason === 'lean') {
+    p.grounded = true;
+    p.stumbleT = 0.3;
+    p.y = groundYFull(p.x, p.s);
+  } else {
+    takeOff(OLLIE_VY);   // popped off deliberately
+    AudioFX.whoosh();
   }
 }
 
@@ -1415,13 +1723,15 @@ function land() {
 // Input
 // ---------------------------------------------------------------------------
 let dragging = false;
-let dragX0 = 0, dragY0 = 0, dragX = 0;
+let dragX0 = 0, dragY0 = 0, dragX = 0, dragY = 0;
 let dragMoved = 0;
 let downAt = 0;
 let steerKey = 0, keyL = false, keyR = false;
+let keyUp = false, keyDown = false, keyGrab = false;
 
 function tryJump() {
   if (state !== 'playing') return;
+  if (player.rail) { dismountRail('pop'); return; }
   if (player.grounded) {
     takeOff(OLLIE_VY);
     AudioFX.whoosh();
@@ -1451,7 +1761,7 @@ canvas.addEventListener('pointerdown', (e) => {
   AudioFX.resume();
   dragging = true;
   dragX0 = e.clientX; dragY0 = e.clientY;
-  dragX = e.clientX;
+  dragX = e.clientX; dragY = e.clientY;
   dragMoved = 0;
   downAt = performance.now();
   canvas.setPointerCapture?.(e.pointerId);
@@ -1459,11 +1769,18 @@ canvas.addEventListener('pointerdown', (e) => {
 canvas.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   const dx = e.clientX - dragX;
-  dragX = e.clientX;
+  const dy = e.clientY - dragY;
+  dragX = e.clientX; dragY = e.clientY;
   dragMoved = Math.max(dragMoved, Math.hypot(e.clientX - dragX0, e.clientY - dragY0));
-  if (state === 'playing' && !player.grounded) {
+  // in the air the same drag is rotation: sideways spins, up/down flips. Which
+  // axis wins is decided per move event, so a diagonal does a bit of both.
+  if (state === 'playing' && !player.grounded && !player.rail) {
     player.spin += dx * SPIN_PER_PX;
     player.spinTotal += dx * SPIN_PER_PX;
+    // dragging down pulls the nose down — a frontflip; up throws it back
+    player.flip += dy * FLIP_PER_PX;
+    player.flipTotal += dy * FLIP_PER_PX;
+    if (Math.hypot(dx, dy) > 1.5) player.grabT = 0;   // a hand on the board is a still hand
   }
 });
 canvas.addEventListener('pointerup', () => {
@@ -1485,6 +1802,9 @@ muteBtn.addEventListener('click', () => { AudioFX.init(); AudioFX.toggle(); });
 window.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keyL = true;
   if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keyR = true;
+  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { keyUp = true; e.preventDefault(); }
+  if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { keyDown = true; e.preventDefault(); }
+  if (e.key === 'Shift') keyGrab = true;
   if (e.key === ' ' || e.key === 'Enter') {
     e.preventDefault();
     AudioFX.init(); AudioFX.resume();
@@ -1499,6 +1819,9 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keyL = false;
   if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keyR = false;
+  if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keyUp = false;
+  if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keyDown = false;
+  if (e.key === 'Shift') keyGrab = false;
 });
 
 // ---------------------------------------------------------------------------
@@ -1518,18 +1841,48 @@ function steerInput(dt) {
   return steerKey;
 }
 
+// A flick of the edges throws a fan of snow off the new outside edge — the
+// answer to a quick cut that a smooth lean does not get.
+function kickUpSnow(dir) {
+  const p = player;
+  const side = -dir;
+  for (let i = 0; i < 16; i++) {
+    emitSpray(
+      p.x + side * rand(0.05, 0.5), p.y + rand(0.02, 0.3), -p.s + rand(-0.2, 0.8),
+      side * rand(2.4, 6.5) + p.vx * 0.2, rand(2.2, 5.6), rand(0.4, 3.2), rand(0.45, 0.9)
+    );
+  }
+  AudioFX.swish();
+  camShake = Math.min(camShake + 0.05, 1);
+  navigator.vibrate?.(4);
+}
+
 function updatePlaying(dt) {
   elapsed += dt;
   const p = player;
 
-  const accel = Math.max(PULL_MIN, (MAX_V - p.v) * PULL);
-  p.v = Math.min(p.v + accel * dt, MAX_V + 2);
-
   const prevS = p.s;
-  p.s += p.v * dt;
-
   const steer = steerInput(dt);
   const maxVx = STEER_MAX * p.v;
+  // edge pressure, 0..1 — it prices the turn and drives spray, sound and lean
+  const carve01 = p.grounded && p.stumbleT <= 0
+    ? clamp(Math.abs(p.vx) / Math.max(maxVx, 1), 0, 1) : 0;
+  p.v = speedStep(p.v, carve01, dt, !!p.rail);
+  p.s += p.v * dt;
+
+  // Quick cuts throw snow; a smooth lean does not. What separates them is
+  // either changing edges under load (a reversal — the keyboard ramp gets here
+  // too) or a flick faster than any held input can produce.
+  const steerWas = prevSteer;
+  const cutRate = (steer - steerWas) / Math.max(dt, 1e-4);
+  prevSteer = steer;
+  const reversal = Math.sign(cutRate) !== Math.sign(steerWas) && Math.abs(steerWas) > 0.22;
+  if (p.grounded && !p.rail && Math.abs(cutRate) > CUT_RATE &&
+      (reversal || Math.abs(cutRate) > CUT_FLICK) && elapsed - lastCutAt > CUT_COOLDOWN) {
+    lastCutAt = elapsed;
+    kickUpSnow(Math.sign(cutRate));
+  }
+
   if (p.grounded && p.stumbleT <= 0) {
     p.vx = damp(p.vx, steer * maxVx, 6.5, dt);
   } else if (p.grounded) {
@@ -1553,7 +1906,27 @@ function updatePlaying(dt) {
   }
 
   // vertical
-  if (p.grounded) {
+  if (p.rail) {
+    // On a rail there is no snow under the board: the bar holds you up, the
+    // only thing to manage is balance, and leaning right out of it steps off.
+    const r = p.rail;
+    if (p.s > r.s + RAIL_LEN) dismountRail('end');
+    else if (Math.abs(steer) > 0.8) dismountRail('lean');
+    else {
+      p.railSway = damp(p.railSway, steer * 0.55, 5, dt);
+      p.x = damp(p.x, r.x, 9, dt);
+      p.vx = 0;
+      p.y = railTopY(r, p.s);
+      for (let i = 0; i < 2; i++) {
+        if (Math.random() > 0.55) continue;
+        emitSpray(p.x + rand(-0.12, 0.12), p.y - 0.02, -p.s + rand(-0.15, 0.35),
+          rand(-2.2, 2.2), rand(0.5, 2.6), rand(-1, 2.6), rand(0.18, 0.42), SPARK, true);
+      }
+      AudioFX.setGrind(clamp(p.v / MAX_V, 0.35, 1));
+      AudioFX.setCarve(0);
+    }
+  }
+  if (p.grounded && !p.rail) {
     const lip = onRampLipCross(prevS, p.s, p.x);
     if (lip) {
       takeOff(Math.min(2.2 + p.v * 0.3, 11));
@@ -1563,13 +1936,15 @@ function updatePlaying(dt) {
       camShake = Math.min(camShake + 0.1, 1);
     } else {
       p.y = groundYFull(p.x, p.s);
-      if (elapsed - jumpBufferedAt < 0.14) {
+      const onto = railAt(p.x, p.s, p.y);
+      if (onto) mountRail(onto);          // rode straight up the lead-in
+      else if (elapsed - jumpBufferedAt < 0.14) {
         jumpBufferedAt = -9;
         tryJump();
       }
     }
   }
-  if (!p.grounded) {
+  if (!p.grounded && !p.rail) {
     p.vy -= G * dt;
     p.y += p.vy * dt;
     const keyDir = (keyR ? 1 : 0) - (keyL ? 1 : 0);
@@ -1577,29 +1952,47 @@ function updatePlaying(dt) {
       p.spin += keyDir * SPIN_KEY * dt;
       p.spinTotal += keyDir * SPIN_KEY * dt;
     }
-    const gy = groundYFull(p.x, p.s);
-    if (p.y <= gy && p.vy < 0) {
-      p.y = gy;
-      land();
+    // flips: ↑/↓ (or W/S) in the air, matching the vertical drag on touch
+    const flipDir = (keyDown ? 1 : 0) - (keyUp ? 1 : 0);
+    if (flipDir !== 0) {
+      p.flip += flipDir * FLIP_KEY * dt;
+      p.flipTotal += flipDir * FLIP_KEY * dt;
+      p.grabT = 0;
+    }
+    // a grab is a still hand: hold the drag (or Shift) and add no rotation
+    if ((dragging || keyGrab) && elapsed - p.airStart > 0.2) p.grabT += dt;
+    p.grabbed = p.grabT >= GRAB_HOLD;
+
+    const onto = railAt(p.x, p.s, p.y);
+    if (onto && p.vy <= 0) {
+      mountRail(onto);                    // dropped in from the air
+    } else {
+      const gy = groundYFull(p.x, p.s);
+      if (p.y <= gy && p.vy < 0) {
+        p.y = gy;
+        land();
+      }
     }
   }
 
   if (p.stumbleT > 0) p.stumbleT -= dt;
 
-  // collisions — near the ground only, so you can ollie clean over rocks
+  // Collisions. Every obstacle is a cone of contact (see rules.js): a rock is
+  // short enough to ollie, and a tree's crown really does end, so a kicker can
+  // carry you clean over one.
   const hAbove = p.y - baseGround(p.x, p.s);
   for (const o of obstacles) {
     const ds = o.s - p.s;
     if (ds < -2 || ds > 3) continue;
-    const dist = Math.hypot(o.x - p.x, ds);
-    if (dist < o.r + 0.42 && hAbove < o.h) {
+    const dx = o.x - p.x;
+    if (!p.rail && hitsObstacle(o, dx, ds, hAbove)) {
       crash();
       break;
     }
     if (!o.passed && ds < 0.4) {
       o.passed = true;
-      if (dist < o.r + 1.5 && p.grounded) {
-        bonus += 15;
+      if (Math.hypot(dx, ds) < o.r + 1.5 && p.grounded) {
+        scored(15);
         toast('close! <span class="pts">+15</span>', true);
       }
     }
@@ -1608,13 +2001,13 @@ function updatePlaying(dt) {
 
   // heading & lean
   p.heading = Math.atan2(-p.vx, p.v);
-  const leanT = p.grounded ? clamp(p.vx / maxVx, -1, 1) : 0;
+  const leanT = p.rail ? p.railSway : p.grounded ? clamp(p.vx / maxVx, -1, 1) : 0;
   p.lean = damp(p.lean, leanT, 8, dt);
-  const crouchT = p.grounded ? clamp(Math.abs(p.lean) * 0.55, 0, 0.6) : 0.85;
+  const crouchT = p.rail ? 0.7 : p.grounded ? clamp(Math.abs(p.lean) * 0.55, 0, 0.6) : p.grabbed ? 1 : 0.85;
   p.crouch = damp(p.crouch, crouchT, 7, dt);
 
   // carve spray + trail + sound
-  const carveMag = p.grounded && p.stumbleT <= 0 ? Math.abs(p.vx) / Math.max(maxVx, 1) : 0;
+  const carveMag = carve01;
   if (p.grounded && carveMag > 0.12) {
     const rate = carveMag * 130 * dt;
     const n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
@@ -1639,8 +2032,17 @@ function updatePlaying(dt) {
     pushTrailPoint(p.x, p.s, p.vx / dLen, -p.v / dLen, p.stumbleT > 0 ? 0.2 : 0.5);
     trailLastS = p.s;
   }
-  AudioFX.setCarve(carveMag * clamp(p.v / MAX_V, 0.3, 1));
+  if (!p.rail) {
+    AudioFX.setCarve(carveMag * clamp(p.v / MAX_V, 0.3, 1));
+    AudioFX.setGrind(0);
+  }
   AudioFX.setWind(clamp(p.v / MAX_V, 0, 1));
+
+  // a hot streak burns off the tail of the board
+  if (heat > 0.02 && Math.random() < dt * 60 * heat) {
+    emitSpray(p.x + rand(-0.2, 0.2), p.y + rand(0.04, 0.22), -p.s + rand(0.3, 0.9),
+      rand(-0.8, 0.8), rand(0.6, 2.2), rand(1, 3.4), rand(0.3, 0.6), heatColor(), true);
+  }
 
   setScore(Math.floor(p.s - runStartS) + bonus);
   streamWorld(p.s);
@@ -1677,6 +2079,10 @@ function updateAttract(dt) {
     const ds = k.s - p.s;
     if (ds > 2 && ds < 30 && Math.abs(k.x - p.x) < 3.4) tx = p.x + (p.x < k.x ? -3.4 : 3.4);
   }
+  for (const r of rails) {
+    const ds = r.s - p.s;
+    if (ds > 2 && ds < 30 && Math.abs(r.x - p.x) < 3.4) tx = p.x + (p.x < r.x ? -3.4 : 3.4);
+  }
   tx = clamp(tx, -9, 9);
   const nx = damp(p.x, tx, 1.4, dt);
   p.vx = (nx - p.x) / Math.max(dt, 1e-4);
@@ -1700,24 +2106,38 @@ function updateAttract(dt) {
 // ---------------------------------------------------------------------------
 function updateRider(dt) {
   const p = player;
-  rider.position.set(p.x, p.y, -p.s);
+  let styleYaw = 0;
+  // A body flips about its own middle. The group's origin is the board, so the
+  // origin is swung around the pivot instead — which is a no-op at flip 0, and
+  // keeps the trajectory the rider's centre rather than their feet.
+  const fp = p.flipVis === 0 ? 0 : FLIP_PIVOT;
+  rider.position.set(
+    p.x,
+    p.y + fp * (1 - Math.cos(p.flipVis)),
+    -p.s - fp * Math.sin(p.flipVis)
+  );
   if (state === 'crashed' || state === 'over') {
     rider.rotation.y += 9 * dt;
     rider.rotation.z = Math.min(rider.rotation.z + 6 * dt, Math.PI / 2 + 0.2);
     rider.rotation.x = 0;
   } else {
     p.spinVis = damp(p.spinVis, p.spin, 14, dt);
-    const styleYaw = 0.26 * (p.grounded ? 1 : 0.4);
+    p.flipVis = damp(p.flipVis, p.flip, 14, dt);
+    styleYaw = STYLE_YAW * (p.grounded ? 1 : 0.4);
     rider.rotation.y = p.heading + p.spinVis + styleYaw;
     let roll = -p.lean * 0.5;
     let pitch;
-    if (p.grounded) {
+    if (p.rail) {
+      // the bar sets the pitch; the sway is all in the shoulders
+      pitch = Math.atan2(p.rail.y1 - p.rail.y0, RAIL_LEN);
+      roll = -p.lean * 0.28;
+    } else if (p.grounded) {
       // board follows the terrain (and rides up kicker faces)
       const gA = groundYFull(p.x, p.s + 0.9), gB = groundYFull(p.x, p.s - 0.9);
       p.slopePitch = damp(p.slopePitch, Math.atan2(gA - gB, 1.8), 9, dt);
       pitch = p.slopePitch;
     } else {
-      pitch = clamp(-p.vy * 0.02, -0.28, 0.34);
+      pitch = clamp(-p.vy * 0.02, -0.28, 0.34) + p.flipVis;
     }
     if (p.stumbleT > 0) {
       roll += Math.sin(elapsed * 26) * 0.3 * (p.stumbleT / 0.85);
@@ -1736,13 +2156,18 @@ function updateRider(dt) {
   torso.rotation.y = -p.lean * 0.25;
   head.rotation.x = 0.3 + cr * 0.24;     // eyes stay on the fall line
 
-  const spread = p.grounded ? Math.abs(p.lean) : 0.25;
-  const grab = !p.grounded ? clamp((elapsed - p.airStart) * 4, 0, 1) : 0;
+  // arms: wide for balance on an edge or a rail, pulled in tight for a grab
+  const spread = p.rail ? 0.85 : p.grounded ? Math.abs(p.lean) : p.grabbed ? 0 : 0.25;
+  const grab = p.grounded || p.rail ? 0
+    : clamp((elapsed - p.airStart) * 4, 0, 1) * (p.grabbed ? 1.4 : 1);
   armL.rotation.z = -(0.18 + spread * 0.75);
   armR.rotation.z = 0.18 + spread * 0.75;
-  armL.rotation.x = grab * 0.5;
-  armR.rotation.x = -grab * 1.1; // rear hand reaches for the board
-  head.rotation.y = -0.28 - torso.rotation.y;
+  armL.rotation.x = grab * (p.grabbed ? 1.25 : 0.5);
+  armR.rotation.x = -grab * (p.grabbed ? 1.6 : 1.1); // rear hand reaches for the board
+  armL.rotation.z += grab * (p.grabbed ? 0.5 : 0);   // ...and both hands come inboard
+  armR.rotation.z -= grab * (p.grabbed ? 0.5 : 0);
+  // the face stays on the fall line whatever the stance is doing
+  head.rotation.y = -styleYaw - torso.rotation.y;
 
   const gy = groundYFull(p.x, p.s);
   blobShadow.position.set(p.x, gy + 0.05, -p.s);
@@ -1793,6 +2218,97 @@ function updateClouds(dt) {
 }
 
 // ---------------------------------------------------------------------------
+// Sundown — the light runs out on a long run
+//
+// Distance is the clock. Past DUSK_START the sun drops into alpenglow; another
+// DUSK_LEN metres and the run is under moonlight, with the chalet windows, the
+// kicker flags and the streak glow doing all the work. Restarting brings the
+// sun back up, so every run is a whole afternoon.
+//
+// One colour drives the whole thing. Everything *unlit* — the painterly range,
+// the valley, the forests, the netting, the sky's own base stop — is multiplied
+// by `tint`, and the fog is that same tint times the daylight fog colour. That
+// is why the aerial haze baked into the backdrop still lands exactly on the
+// horizon at midnight: both sides of the seam went through the same multiply.
+// Everything *lit* needs nothing at all — the sun and hemisphere lights dim and
+// go cold, and the snow follows.
+// ---------------------------------------------------------------------------
+const DUSK_START = 850;          // metres of run before the light starts to go
+const DUSK_LEN = 1150;           // ...and metres from there to full dark
+
+const SKY_KEYS = [
+  { at: 0, top: 0x3f86d4, mid: 0x8fc0ef, low: 0xd5e9fa, tint: 0xffffff,
+    sun: 0xfff0d6, sunI: 2.0, hemiS: 0xcfe5ff, hemiG: 0xcddcec, hemiI: 1.35,
+    sunO: 1, moonO: 0, star: 0 },
+  { at: 0.55, top: 0x2b5c9e, mid: 0x7f9ed0, low: 0xf7c39a, tint: 0xffd6bb,
+    sun: 0xffa867, sunI: 1.9, hemiS: 0xe2c9e4, hemiG: 0xe6cfc6, hemiI: 1.15,
+    sunO: 1, moonO: 0.3, star: 0.18 },
+  { at: 1, top: 0x050b1e, mid: 0x0c1738, low: 0x1d2c55, tint: 0x455577,
+    sun: 0xa9c6ff, sunI: 0.95, hemiS: 0x33507f, hemiG: 0x3c4c6a, hemiI: 0.82,
+    sunO: 0, moonO: 1, star: 1 },
+];
+
+const cTop = new THREE.Color(), cMid = new THREE.Color(), cLow = new THREE.Color();
+const cTint = new THREE.Color(), cBase = new THREE.Color(), cTmp = new THREE.Color();
+const FOG_DAY = new THREE.Color(FOG_COLOR);
+let dayT = 0;
+let paintedT = -1;
+
+// `out` is a caller's scratch colour, so the second key needs a private one of
+// its own: aliasing them makes the lerp evaluate its argument into the same
+// object it started from and silently return the *end* colour at every u.
+const cKey = new THREE.Color();
+const keyColor = (a, b, u, key, out) => out.setHex(a[key]).lerp(cKey.setHex(b[key]), u);
+const keyNum = (a, b, u, key) => lerp(a[key], b[key], u);
+
+function applyLight(a, b, u) {
+  keyColor(a, b, u, 'tint', cTint);
+  cBase.copy(FOG_DAY).multiply(cTint);
+  scene.fog.color.copy(cBase);
+  ridgeMat.color.copy(cTint);
+  rangeMat.color.copy(cTint);
+  netMat.color.copy(cTint);
+  for (const c of clouds) c.material.color.copy(cTint);
+  // snow keeps more of itself than the backdrop does, or the piste you are
+  // actually riding goes to mud
+  sprayMat.color.copy(cTmp.set(0xffffff).lerp(cTint, 0.55));
+  trailCold[0] = 0.72 * cTint.r; trailCold[1] = 0.81 * cTint.g; trailCold[2] = 0.9 * cTint.b;
+
+  sun.color.copy(keyColor(a, b, u, 'sun', cTmp));
+  sun.intensity = keyNum(a, b, u, 'sunI');
+  hemi.color.copy(keyColor(a, b, u, 'hemiS', cTmp));
+  hemi.groundColor.copy(keyColor(a, b, u, 'hemiG', cTmp));
+  hemi.intensity = keyNum(a, b, u, 'hemiI');
+
+  sunSprite.material.opacity = keyNum(a, b, u, 'sunO');
+  sunSprite.material.color.copy(keyColor(a, b, u, 'sun', cTmp));
+  moonSprite.material.opacity = keyNum(a, b, u, 'moonO');
+  starMat.opacity = keyNum(a, b, u, 'star');
+}
+
+function updateSky(dt) {
+  // the attract loop stays in daylight; the clock is the *run*, not the world
+  const runDist = state === 'start' ? 0 : player.s - runStartS;
+  const target = clamp((runDist - DUSK_START) / DUSK_LEN, 0, 1);
+  dayT = damp(dayT, target, 0.8, dt);
+  if (Math.abs(dayT - paintedT) < 0.004) return;
+  paintedT = dayT;
+
+  let i = 0;
+  while (i < SKY_KEYS.length - 2 && dayT > SKY_KEYS[i + 1].at) i++;
+  const a = SKY_KEYS[i], b = SKY_KEYS[i + 1];
+  const u = clamp((dayT - a.at) / (b.at - a.at), 0, 1);
+
+  applyLight(a, b, u);
+  paintSky(
+    keyColor(a, b, u, 'top', cTop).getStyle(),
+    keyColor(a, b, u, 'mid', cMid).getStyle(),
+    keyColor(a, b, u, 'low', cLow).getStyle(),
+    cBase.getStyle()
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Bootstrap + loop
 // ---------------------------------------------------------------------------
 generateTo(VIEW_AHEAD);
@@ -1813,10 +2329,11 @@ document.addEventListener('visibilitychange', () => {
 });
 
 let last = performance.now();
+let frozen = false;      // headless tests drive the simulation themselves
 function tick(now) {
   requestAnimationFrame(tick);
   if (hidden) return;
-  if (pause.active) { last = now; return; }
+  if (frozen || pause.active) { last = now; return; }
   let dt = (now - last) / 1000;
   last = now;
   dt = Math.min(dt, 0.033);
@@ -1828,11 +2345,94 @@ function tick(now) {
   updateRider(dt);
   updateCamera(dt);
   updateClouds(dt);
+  updateSky(dt);          // before the streak: it sets the cold trail colour
+  updateStreakFx(dt);
   updateSpray(dt);
   updateTrailMesh();
 
   renderer.render(scene, camera);
 }
+// Test hook: the mountain is random and 40 m/s wide, so a headless test cannot
+// wait for a rail or a tree to show up on its own. This lets tools/smoke.mjs
+// put one exactly where it needs one and read back what happened. Harmless in
+// production — it exposes state that is already one console line away.
+window.__test = {
+  player,
+  rules: { STREAK_ON },
+  get state() { return state; },
+  get streak() { return streak; },
+  get heat() { return heat; },
+  get dayT() { return dayT; },
+  get bonus() { return bonus; },
+  get grinding() { return !!player.rail; },
+  get obstacles() { return obstacles.map((o) => ({ x: o.x, s: o.s, r: o.r, h: o.h })); },
+  get pisteHalf() { return PISTE_HALF; },
+  groundY: (x, s) => groundYFull(x, s),
+  start: () => startRun(),
+  // Freezing the rAF loop is what makes a headless run repeatable: `step` then
+  // advances the whole simulation minus the drawing, at a fixed dt.
+  freeze: (on = true) => { frozen = on; },
+  // exactly what tick() does, minus the drawing — including the camera, which
+  // has to keep following or a screenshot taken later looks at empty sky
+  step(dt = 1 / 60, n = 1) {
+    for (let i = 0; i < n; i++) {
+      if (state === 'playing') updatePlaying(dt);
+      else if (state === 'crashed' || state === 'over') updateCrashed(dt);
+      else updateAttract(dt);
+      updateRider(dt);
+      updateCamera(dt);
+      updateClouds(dt);
+      updateSky(dt);
+      updateStreakFx(dt);
+      updateSpray(dt);
+    }
+  },
+  // ...and the drawing, so a screenshot can be taken of an exact state
+  paint() {
+    updateTrailMesh();
+    renderer.render(scene, camera);
+  },
+  // Wipe the piste ahead — features and their meshes both, so a screenshot
+  // does not show a ramp that is no longer there.
+  clearAhead(m = 400) {
+    const from = player.s - 5;
+    for (let k = obstacles.length - 1; k >= 0; k--) {
+      if (obstacles[k].s > from) removeObstacle(k);
+    }
+    for (const list of [kickers, rails]) {
+      for (let k = list.length - 1; k >= 0; k--) {
+        if (list[k].s > from) { list[k] = list[list.length - 1]; list.pop(); }
+      }
+    }
+    for (const pool of [poolKickers, poolRails]) {
+      for (let k = pool.active.length - 1; k >= 0; k--) {
+        const it = pool.active[k];
+        if (it.s <= from) continue;
+        pool.mesh.setMatrixAt(it.i, HIDE_M);
+        pool.mesh.instanceMatrix.needsUpdate = true;
+        pool.free.push(it.i);
+        pool.active[k] = pool.active[pool.active.length - 1];
+        pool.active.pop();
+      }
+    }
+    nextObstacleS = Math.max(nextObstacleS, player.s + m);
+    nextKickerS = Math.max(nextKickerS, player.s + m);
+    nextRailS = Math.max(nextRailS, player.s + m);
+  },
+  putTree(dx, ds, sc = 1) {
+    spawnObstacleTree(player.x + dx, player.s + ds, sc);
+    return obstacles[obstacles.length - 1];
+  },
+  putRail(dx = 0, ds = 10) {
+    spawnRail(player.s + ds, player.x + dx);
+    return rails[rails.length - 1] || null;
+  },
+  putKicker(ds = 12) {
+    spawnKicker(player.s + ds);
+    return kickers[kickers.length - 1];
+  },
+};
+
 const pause = installPause({
   canPause: () => state === 'playing',
   right: 68,                                  // clear of the mute button

@@ -84,6 +84,36 @@ html, body {
   -webkit-backdrop-filter: blur(8px);
 }
 
+/* The streak pill only exists while a streak does — it appears at three in a
+   row, the same moment the board lights up, so the glow on the snow and the
+   number in the HUD are obviously the same fact. */
+.streak-chip {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  font-variant-numeric: tabular-nums;
+  color: #06231f;
+  background: var(--accent);
+  border: 1px solid rgba(255, 255, 255, .3);
+  border-radius: 999px;
+  padding: 5px 12px;
+  box-shadow: 0 0 22px -6px rgba(45, 212, 191, .9);
+  animation: streak-pop .32s var(--ease-spring) both;
+}
+.streak-chip.hot {
+  color: #2b1600;
+  background: #ffb03a;
+  box-shadow: 0 0 26px -5px rgba(255, 176, 58, .95);
+}
+
+@keyframes streak-pop {
+  from { transform: scale(.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .streak-chip { animation: none; }
+}
+
 .mute-btn {
   position: fixed;
   top: calc(env(safe-area-inset-top) + 14px);

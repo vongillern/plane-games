@@ -1,10 +1,11 @@
-const CACHE = 'am-carve-v10';
+const CACHE = 'am-carve-v11';
 
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './game.js',
+  './rules.js',
   './update.js',
   './install.js',
   './pause.js',
