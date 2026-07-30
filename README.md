@@ -54,6 +54,22 @@ tools/gen-icons.mjs   dependency-free icon generator (SDF → PNG)
 DESIGN.md             the design language everything follows
 ```
 
+## Checks
+
+None of these are build steps: nothing on the site depends on them, they emit
+nothing, and they have no dependencies except where noted.
+
+```sh
+node tools/check.mjs         # the invariants DESIGN.md promises, read from source
+node tools/span-physics.mjs  # games/span/physics.js — are the levels still solvable?
+node tools/carve-rules.mjs   # games/carve/rules.js — tricks, collisions, speed
+node tools/smoke.mjs         # every app in a real browser, then with the network cut
+```
+
+`smoke.mjs` is the only one that needs anything installed, and deliberately not
+in a `package.json`: `npm i --no-save --prefix tools playwright-core`, plus a
+Chromium from `playwright install`. Run it locally, not in CI.
+
 ## Adding a game
 
 Read `DESIGN.md` first. Then, in `games/<new>/`:

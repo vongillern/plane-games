@@ -556,6 +556,252 @@ await phase('2048 save/restore', async () => {
   }
 });
 
+// --- 7. Carve: tricks, rails, obstacles ------------------------------------
+// tools/carve-rules.mjs proves the *rules* in Node. This proves they are wired
+// to the game: that a tree you fly over really is survivable in the loop that
+// runs, that a rail catches a rider and pays out, that a held ↑ becomes a
+// backflip, that a streak lights the board up, and that the light goes down.
+//
+// The rAF loop is frozen and the simulation is stepped by hand, so none of it
+// depends on wall-clock timing or on what the mountain randomly generated.
+await phase('carve tricks, rails and sundown', async () => {
+  const ctx = await browser.newContext();
+  try {
+    const page = await ctx.newPage();
+    const log = watch(page);
+    await page.goto(`${BASE}/games/carve/`, { waitUntil: 'load' });
+    await settle(page, 400);
+
+    const fresh = () => page.evaluate(() => {
+      window.__test.freeze(true);
+      window.__test.start();
+      window.__test.clearAhead(600);
+      return true;
+    });
+
+    // --- flying over a tree ------------------------------------------------
+    // The reported bug: a kicker carried the rider clean over a crown and the
+    // run ended anyway, because a tree's contact height was literally 99m.
+    await fresh();
+    const overTree = await page.evaluate(() => {
+      const t = window.__test, p = t.player;
+      const tree = t.putTree(0, 1.2, 1);            // dead ahead, full size
+      p.grounded = false;
+      p.vy = 0;
+      p.y += 3.6;                                   // about a kicker's apex
+      t.step(1 / 60, 4);
+      return { state: t.state, treeH: tree.h, passed: p.s };
+    });
+    check('carve/tree', 'a tree no longer has an infinite crown',
+      overTree.treeH < 4, show(overTree.treeH));
+    check('carve/tree', 'flying over a tree does not end the run',
+      overTree.state === 'playing', show(overTree));
+
+    // ...and the rule that must not have loosened with it.
+    await fresh();
+    const intoTree = await page.evaluate(() => {
+      const t = window.__test, p = t.player;
+      t.putTree(0, 1.2, 1);
+      t.step(1 / 60, 6);
+      return t.state;
+    });
+    check('carve/tree', 'riding into a tree still ends the run',
+      intoTree !== 'playing', show(intoTree));
+
+    // --- grinding a rail --------------------------------------------------
+    await fresh();
+    const rail = await page.evaluate(async () => {
+      const t = window.__test;
+      const r = t.putRail(0, 9);
+      let caught = false, held = 0;
+      for (let i = 0; i < 240 && t.state === 'playing'; i++) {
+        t.step(1 / 60, 1);
+        if (t.grinding) { caught = true; held++; }
+        else if (caught) break;                      // rode off the end
+      }
+      return {
+        placed: !!r, caught, held, bonus: t.bonus, streak: t.streak,
+        toast: document.getElementById('toasts').textContent,
+      };
+    });
+    check('carve/rail', 'a rail can be placed in the rider\'s lane', rail.placed, show(rail));
+    check('carve/rail', 'riding into it starts a grind', rail.caught, show(rail));
+    check('carve/rail', 'and the grind lasts long enough to feel like one',
+      rail.held > 20, show(rail.held));
+    check('carve/rail', 'riding off the end pays for the metres held',
+      rail.bonus > 0 && /grind/.test(rail.toast), show(rail));
+    check('carve/rail', 'a grind counts toward the streak', rail.streak >= 1, show(rail.streak));
+
+    // --- flips ------------------------------------------------------------
+    // A full backflip is 2π at FLIP_KEY rad/s; hold ↑ for that long in the air
+    // and the landing has to be named for it.
+    await fresh();
+    await page.evaluate(() => {
+      const t = window.__test, p = t.player;
+      p.v = 34;
+      p.grounded = false;
+      p.vy = 13;                                     // a generous kicker
+      p.airStart = 0;
+      t.step(1 / 60, 1);
+    });
+    await page.keyboard.down('ArrowUp');
+    await page.evaluate(() => window.__test.step(1 / 60, 74));
+    await page.keyboard.up('ArrowUp');
+    const flip = await page.evaluate(() => {
+      const t = window.__test;
+      for (let i = 0; i < 160 && !t.player.grounded && t.state === 'playing'; i++) t.step(1 / 60, 1);
+      return { bonus: t.bonus, state: t.state, toast: document.getElementById('toasts').textContent };
+    });
+    check('carve/flip', 'a held ↑ in the air lands a backflip',
+      /backflip/.test(flip.toast), show(flip));
+    check('carve/flip', 'and it scores', flip.bonus > 0, show(flip.bonus));
+
+    // ...and the same trick through the input that actually ships: a drag.
+    // 2π at FLIP_PER_PX (0.017 rad/px) is 370px of vertical travel, dragged
+    // while the loop is frozen so no simulated time passes mid-flick.
+    await fresh();
+    await page.evaluate(() => {
+      const t = window.__test, p = t.player;
+      p.v = 34; p.grounded = false; p.vy = 13; p.airStart = 0;
+      t.step(1 / 60, 1);
+    });
+    await page.mouse.move(640, 650);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) await page.mouse.move(640, 650 - i * 37);
+    await page.mouse.up();
+    const dragFlip = await page.evaluate(() => {
+      const t = window.__test;
+      const spun = { flip: t.player.flip, spin: t.player.spin };
+      for (let i = 0; i < 200 && !t.player.grounded && t.state === 'playing'; i++) t.step(1 / 60, 1);
+      return { ...spun, bonus: t.bonus, toast: document.getElementById('toasts').textContent };
+    });
+    check('carve/flip', 'dragging up in the air rotates the board backwards',
+      dragFlip.flip < -6 && dragFlip.flip > -6.6, show(dragFlip.flip));
+    check('carve/flip', 'and no sideways drag means no spin came with it',
+      Math.abs(dragFlip.spin) < 0.01, show(dragFlip.spin));
+    check('carve/flip', 'a dragged backflip lands and scores',
+      /backflip/.test(dragFlip.toast) && dragFlip.bonus > 0, show(dragFlip));
+
+    // --- streak -----------------------------------------------------------
+    // Three scored tricks in a row is the threshold the HUD and the board glow
+    // both read, so it is one assertion for both.
+    await fresh();
+    const streak = await page.evaluate(() => {
+      const t = window.__test, p = t.player, need = t.rules.STREAK_ON;
+      for (let n = 0; n < need; n++) {
+        p.grounded = false;
+        p.vy = 9;
+        p.airStart = -2;                             // long enough to be "clean air"
+        p.spin = 0; p.spinTotal = 0; p.flip = 0; p.flipTotal = 0;
+        for (let i = 0; i < 200 && !p.grounded; i++) t.step(1 / 60, 1);
+      }
+      t.step(1 / 60, 30);                            // let the glow ease in
+      const chip = document.getElementById('streak');
+      return {
+        streak: t.streak, heat: t.heat, hidden: chip.hidden,
+        chip: chip.textContent, need,
+      };
+    });
+    check('carve/streak', 'clean airs in a row build a streak',
+      streak.streak >= streak.need, show(streak));
+    check('carve/streak', 'the streak pill appears with it', streak.hidden === false, show(streak));
+    check('carve/streak', 'and names the count', streak.chip.includes(String(streak.streak)), show(streak.chip));
+    check('carve/streak', 'the board lights up (heat > 0)', streak.heat > 0.05, show(streak.heat));
+
+    const cooled = await page.evaluate(() => {
+      const t = window.__test, p = t.player;
+      p.grounded = false; p.vy = 6; p.spin = Math.PI / 2; p.spinTotal = Math.PI / 2;
+      for (let i = 0; i < 200 && !p.grounded; i++) t.step(1 / 60, 1);
+      t.step(1 / 60, 60);
+      return { streak: t.streak, heat: t.heat, hidden: document.getElementById('streak').hidden };
+    });
+    check('carve/streak', 'a sketchy landing ends the streak', cooled.streak === 0, show(cooled));
+    check('carve/streak', 'and the board cools off', cooled.heat < 0.2, show(cooled.heat));
+    check('carve/streak', 'and the pill goes away', cooled.hidden === true, show(cooled));
+
+    // --- how crowded the piste is -----------------------------------------
+    // "Sometimes slightly too many obstacles" is a real complaint and a real
+    // regression risk in both directions, so it gets a number. The rider is
+    // lifted 60m and teleported down the fall line, which generates the world
+    // exactly as riding it would while being unable to touch anything.
+    await fresh();
+    const piste = await page.evaluate(() => {
+      const t = window.__test, p = t.player;
+      const seen = new Map();
+      const from = p.s;
+      for (let i = 0; i < 60; i++) {                 // 60 x 50m = 3km
+        p.s += 50;
+        // Airborne and 60m up, re-asserted every step: the grounded branch
+        // plants y back on the snow, and a rider on the snow teleporting
+        // through 3km of trees crashes, which would stop the world generating
+        // and report a suspiciously empty mountain.
+        p.grounded = false;
+        p.rail = null;
+        p.vy = 0;
+        p.y = t.groundY(p.x, p.s) + 60;
+        t.step(1 / 600, 1);
+        for (const o of t.obstacles) seen.set(`${o.x.toFixed(2)}|${o.s.toFixed(2)}`, o);
+      }
+      const span = p.s - from;
+      const all = [...seen.values()].filter((o) => o.s > from + 40 && o.s < p.s - 40);
+
+      // Is there always a line through? At every metre, the widest gap left
+      // between the obstacles straddling that point must fit a rider.
+      let tightest = 99, tightestAt = 0;
+      const H = t.pisteHalf;
+      for (let s = from + 50; s < p.s - 50; s += 1) {
+        const blocked = all
+          .filter((o) => Math.abs(o.s - s) < o.r + 0.5)
+          .map((o) => [o.x - o.r - 0.5, o.x + o.r + 0.5])
+          .sort((a, b) => a[0] - b[0]);
+        let edge = -H, gap = 0;
+        for (const [lo, hi] of blocked) {
+          gap = Math.max(gap, lo - edge);
+          edge = Math.max(edge, hi);
+        }
+        gap = Math.max(gap, H - edge);
+        if (gap < tightest) { tightest = gap; tightestAt = Math.round(s); }
+      }
+      return { per100: (all.length / span) * 100, n: all.length, tightest, tightestAt, state: t.state };
+    });
+    check('carve/piste', 'the survey flew the whole 3km without crashing',
+      piste.state === 'playing', show(piste.state));
+    check('carve/piste', 'the piste is not a slalom course',
+      piste.per100 < 12, show(piste));
+    check('carve/piste', '...and not an empty groomer either',
+      piste.per100 > 3, show(piste));
+    check('carve/piste', 'there is always a line through, everywhere',
+      piste.tightest > 1.6, show(piste));
+
+    // --- sundown ----------------------------------------------------------
+    await fresh();
+    const dusk = await page.evaluate(() => {
+      const t = window.__test;
+      t.step(1 / 60, 300);            // the light eases, so let the new run's morning arrive
+      const early = t.dayT;
+      // ~2.2 km of run, clearing the piste ahead as it goes so the light — not
+      // a tree — is what the test is measuring
+      for (let i = 0; i < 60 && t.state === 'playing'; i++) {
+        t.clearAhead(600);
+        t.step(1 / 60, 60);
+      }
+      return { early, late: t.dayT, dist: Math.round(t.player.s), state: t.state };
+    });
+    check('carve/sundown', 'a run starts in daylight', dusk.early < 0.02, show(dusk.early));
+    check('carve/sundown', 'a long run runs out of it', dusk.late > 0.5, show(dusk));
+
+    await page.evaluate(() => { window.__test.start(); window.__test.step(1 / 60, 240); });
+    const morning = await page.evaluate(() => window.__test.dayT);
+    check('carve/sundown', 'and a restart brings the sun back up', morning < 0.6, show(morning));
+
+    check('carve/errors', 'no uncaught page errors through all of it',
+      log.pageErrors.length === 0, show(log.pageErrors));
+    check('carve/errors', 'and no console errors', log.consoleErrors.length === 0, show(log.consoleErrors));
+  } finally {
+    await ctx.close();
+  }
+});
+
 // ---------------------------------------------------------------------------
 
 await browser.close();
