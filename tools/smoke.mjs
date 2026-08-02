@@ -802,6 +802,205 @@ await phase('carve tricks, rails and sundown', async () => {
   }
 });
 
+// --- 8. Wake: a whole race -------------------------------------------------
+// tools/wake-rules.mjs proves the arithmetic in Node. This proves it is wired
+// to the game, and it does it the only way a race can honestly be tested:
+// by racing one. The rAF loop is frozen, the player is put on the same
+// autopilot the rivals use, and three full laps are stepped by hand — about
+// two and a half minutes of racing in a couple of seconds of wall clock.
+//
+// The things that can only break here are the wiring: a lap that counts twice
+// because the game reads `s` instead of the progress model, a finish that
+// never fires, a HUD that disagrees with the simulation behind it.
+await phase('wake: a full three-lap race', async () => {
+  const ctx = await browser.newContext();
+  try {
+    const page = await ctx.newPage();
+    const log = watch(page);
+    await page.goto(`${BASE}/games/wake/`, { waitUntil: 'load' });
+    await settle(page, 400);
+
+    const fresh = () => page.evaluate(() => {
+      const t = window.__test;
+      t.freeze(true);
+      t.start();
+      t.go();                       // skip the lights
+      return t.state;
+    });
+
+    check('wake/start', 'the lights go out and the race is on', await fresh() === 'racing');
+
+    // --- the whole race ----------------------------------------------------
+    const race = await page.evaluate(() => {
+      const t = window.__test;
+      t.autopilot(true);
+      let steps = 0;
+      // a cap well past any plausible race, so a game that never finishes
+      // fails here rather than hanging the suite
+      while (t.state === 'racing' && steps < 30000) { t.step(1 / 60, 20); steps += 20; }
+      const laps = t.racers.map((r) => r.lap);
+      return {
+        state: t.state,
+        steps,
+        raceT: t.raceT,
+        playerLap: t.player.lap,
+        bestLap: t.player.bestLap,
+        finishedAt: t.player.finishedAt,
+        place: t.place,
+        laps,
+        standings: t.standings,
+        LAPS: t.rules.LAPS,
+        GRID: t.rules.GRID,
+      };
+    });
+
+    check('wake/race', 'the race ends on its own', race.state === 'finished', show(race.state));
+    check('wake/race', 'the player completed exactly the advertised laps',
+      race.playerLap === race.LAPS, `${race.playerLap} of ${race.LAPS}`);
+    check('wake/race', 'and crossed the line for real', race.finishedAt > 0, show(race.finishedAt));
+    check('wake/race', 'a lap takes a plausible time',
+      race.bestLap > 25 && race.bestLap < 75, `${show(race.bestLap)} s`);
+    check('wake/race', 'three laps take two to four minutes',
+      race.raceT > 90 && race.raceT < 260, `${race.raceT.toFixed(1)} s`);
+    check('wake/race', 'the player finishes somewhere in the field',
+      race.place >= 1 && race.place <= race.GRID, show(race.place));
+    check('wake/race', 'the whole field is still accounted for',
+      new Set(race.standings).size === race.GRID, show(race.standings));
+
+    // Every rival must get round too. A rival stuck on a buoy or driving into
+    // the shallows for two minutes is the classic AI failure, and it is
+    // invisible from the player's seat if it happens behind them.
+    const stuck = race.laps.filter((l) => l < race.LAPS - 1).length;
+    check('wake/ai', 'no rival gets stuck: all of them are on the last lap or done',
+      stuck === 0, `${stuck} rival(s) behind, laps ${show(race.laps)}`);
+
+    // --- the HUD agrees with the simulation --------------------------------
+    const hud = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.go(); t.autopilot(true);
+      t.step(1 / 60, 600);
+      t.paint();
+      return {
+        pos: document.getElementById('posNum').textContent,
+        lap: document.getElementById('lapNum').textContent,
+        clock: document.getElementById('clock').textContent,
+        rows: document.querySelectorAll('#standings li').length,
+        speed: Number(document.getElementById('speedVal').textContent),
+        realPos: t.place,
+        realSpeed: Math.round(t.player.v * 3.6),
+        raceT: t.raceT,
+      };
+    });
+    check('wake/hud', 'the position on screen is the position in the race',
+      hud.pos === String(hud.realPos), `${hud.pos} vs ${hud.realPos}`);
+    check('wake/hud', 'the speedo reads the ski\'s actual speed',
+      hud.speed === hud.realSpeed, `${hud.speed} vs ${hud.realSpeed}`);
+    check('wake/hud', 'the clock is running', /^00:0[7-9]|^00:1[0-2]/.test(hud.clock),
+      `${hud.clock} at ${hud.raceT.toFixed(2)}s`);
+    check('wake/hud', 'every racer has a row in the standings', hud.rows === race.GRID, show(hud.rows));
+    check('wake/hud', 'the lap counter never exceeds the race length',
+      Number(hud.lap) >= 1 && Number(hud.lap) <= race.LAPS, show(hud.lap));
+
+    // --- the shallows are a real punishment, not a wall --------------------
+    const off = await page.evaluate(async () => {
+      const t = window.__test;
+      t.start(); t.go(); t.autopilot(false);
+      t.teleport(200, 0, 30);
+      t.step(1 / 60, 30);
+      const onCourse = t.player.v;
+      t.teleport(200, t.rules.TRACK_HALF + 9, 30);
+      t.step(1 / 60, 90);
+      return { onCourse, inShallows: t.player.v, off: t.player.off, state: t.state };
+    });
+    check('wake/shallows', 'the shallows cost most of your speed',
+      off.inShallows < off.onCourse * 0.7, `${off.inShallows.toFixed(1)} vs ${off.onCourse.toFixed(1)} m/s`);
+    check('wake/shallows', 'the game knows you are off course', off.off === true, show(off));
+    check('wake/shallows', '...but it is not a crash — the race carries on',
+      off.state === 'racing', show(off.state));
+
+    // --- the wake is fuel --------------------------------------------------
+    // The one mechanic the whole design rests on: sitting behind someone fills
+    // the bar. If this stops working the game still runs, and stops being the
+    // game it was designed as.
+    const draft = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.go(); t.autopilot(false); t.setBoost(0);
+      // park a rival 12 m dead ahead, matching speed, and hold station
+      const rival = t.racers.find((r) => !r.isPlayer);
+      for (let i = 0; i < 60; i++) {
+        t.teleport(300, 0, 26);
+        const p = t.player;
+        rival.x = p.x + Math.cos(p.heading) * 12;
+        rival.z = p.z + Math.sin(p.heading) * 12;
+        rival.heading = p.heading;
+        rival.v = 26;
+        t.step(1 / 60, 1);
+      }
+      const drafted = t.player.boost;
+      const towed = t.player.draft;
+      // now the same second of racing with nobody in front
+      t.setBoost(0);
+      for (const r of t.racers) if (!r.isPlayer) { r.x = 9999; r.z = 9999; }
+      for (let i = 0; i < 60; i++) { t.teleport(300, 0, 26); t.step(1 / 60, 1); }
+      return { drafted, towed, alone: t.player.boost, aloneTow: t.player.draft, max: t.rules.BOOST_MAX };
+    });
+    check('wake/draft', 'a second in a rival\'s wake fills a chunk of the bar',
+      draft.drafted > draft.max * 0.15, show(draft.drafted));
+    check('wake/draft', 'the game knows it is being towed', draft.towed > 0.5, show(draft.towed));
+    // Open water is not zero — air off a swell fills the bar too, and should.
+    // What must hold is that the tow is worth clearly more, because the whole
+    // design (and starting the player last) rests on the wake being the prize.
+    check('wake/draft', 'open water is not a tow at all', draft.aloneTow === 0, show(draft.aloneTow));
+    check('wake/draft', 'and open water fills the bar far more slowly',
+      draft.alone < draft.drafted * 0.6, `${draft.alone.toFixed(1)} vs ${draft.drafted.toFixed(1)}`);
+
+    // --- boost spends, and refuses when there is nothing to spend ----------
+    const boost = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.go(); t.autopilot(false);
+      t.teleport(300, 0, 30); t.setBoost(t.rules.BOOST_MAX);
+      t.holdBoost(true);
+      t.step(1 / 60, 45);
+      const firing = { boost: t.player.boost, v: t.player.v, on: t.player.boosting };
+      t.holdBoost(false);
+      // an empty bar must refuse rather than silently do nothing
+      t.setBoost(0);
+      document.getElementById('boostBtn').classList.remove('deny');
+      t.holdBoost(true);
+      const denied = document.getElementById('boostBtn').classList.contains('deny');
+      t.step(1 / 60, 10);
+      const after = t.player.boosting;
+      t.holdBoost(false);
+      return { ...firing, denied, after, max: t.rules.BOOST_MAX };
+    });
+    check('wake/boost', 'holding it drains the bar', boost.boost < boost.max, show(boost.boost));
+    check('wake/boost', 'and the ski actually goes faster than its clean top speed',
+      boost.v > 33, `${boost.v.toFixed(1)} m/s`);
+    check('wake/boost', 'the game agrees it is firing', boost.on === true, show(boost.on));
+    check('wake/boost', 'an empty bar refuses visibly instead of doing nothing',
+      boost.denied === true, show(boost.denied));
+    check('wake/boost', 'and nothing fires', boost.after === false, show(boost.after));
+
+    // --- the water the ski rides is the water that is drawn ----------------
+    const surf = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.go(); t.autopilot(true);
+      t.step(1 / 60, 240);
+      const p = t.player;
+      return { y: p.y, surface: t.waterAt(p.x, p.z), air: p.air };
+    });
+    check('wake/water', 'the ski sits on the surface, not above or below it',
+      surf.air > 0 || Math.abs(surf.y - surf.surface) < 0.6,
+      `ski ${surf.y.toFixed(2)} vs water ${surf.surface.toFixed(2)}`);
+
+    check('wake/errors', 'no uncaught page errors through all of it',
+      log.pageErrors.length === 0, show(log.pageErrors));
+    check('wake/errors', 'and no console errors', log.consoleErrors.length === 0, show(log.consoleErrors));
+  } finally {
+    await ctx.close();
+  }
+});
+
 // ---------------------------------------------------------------------------
 
 await browser.close();

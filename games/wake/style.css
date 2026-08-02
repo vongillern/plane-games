@@ -1,0 +1,565 @@
+:root {
+  --bg: #0a0a0f;
+  --text: #f5f5f7;
+  --text-dim: rgba(245, 245, 247, .55);
+  --border: rgba(255, 255, 255, .08);
+  --accent: #ff2e88;
+  --radius: 20px;
+  --radius-sm: 12px;
+  --ease-spring: cubic-bezier(.22, 1.2, .36, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  /* HUD ink: the lagoon is bright, so every glass panel is a deep sea-navy
+     rather than the neutral black a dark game would use */
+  --glass: rgba(6, 26, 44, .38);
+  --glass-line: rgba(255, 255, 255, .22);
+  --shadow-ink: rgba(4, 24, 44, .55);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+[hidden] { display: none !important; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--bg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---------------------------------------------------------- HUD
+
+   The whole HUD is inert to the pointer: steering is a drag anywhere on the
+   screen, and a readout that ate the drag would make the ski stop turning
+   wherever the player's thumb happened to cross it. Only the boost button
+   takes input back. */
+
+.hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-top {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: calc(env(safe-area-inset-left) + 14px);
+  right: calc(env(safe-area-inset-right) + 14px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* --- position, top left */
+
+.pos {
+  display: flex;
+  align-items: baseline;
+  line-height: .92;
+  text-shadow: 0 2px 14px var(--shadow-ink);
+}
+#posNum {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.pos-of {
+  font-size: 20px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, .72);
+  margin-left: 1px;
+}
+.pos-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, .72);
+  text-shadow: 0 1px 6px var(--shadow-ink);
+}
+/* Leading the race is the one thing worth colouring. It also means the number
+   changing colour is the feedback for an overtake. */
+.pos.p1 #posNum { color: var(--accent); }
+
+/* --- clock, top centre. Absolutely centred rather than flexed, so a
+   three-digit position on the left cannot shove the clock off-centre. */
+
+.clock-block {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  white-space: nowrap;
+}
+.clock {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  text-shadow: 0 2px 14px var(--shadow-ink);
+}
+.lap {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: rgba(255, 255, 255, .8);
+  text-shadow: 0 1px 6px var(--shadow-ink);
+}
+.best-lap {
+  margin-top: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: rgba(255, 255, 255, .58);
+}
+.best-lap.fresh { color: var(--accent); }
+
+/* --- standings, down the left edge */
+
+.standings {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 84px);
+  left: calc(env(safe-area-inset-left) + 12px);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.standings li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px 0 5px;
+  border-radius: 5px;
+  background: rgba(6, 26, 44, .3);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .82);
+}
+.standings .rank {
+  width: 11px;
+  text-align: center;
+  font-size: 9.5px;
+  color: rgba(255, 255, 255, .6);
+}
+/* the livery swatch is the only way to tie a name in the list to a ski on
+   the water — the skis are too far away to read a number off */
+.standings .chip {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+.standings .who { min-width: 54px; }
+.standings li.me {
+  background: var(--accent);
+  color: #26000f;
+  box-shadow: 0 0 18px -6px rgba(255, 46, 136, .9);
+}
+.standings li.me .rank { color: rgba(38, 0, 15, .65); }
+.standings li.done { opacity: .5; }
+
+/* --- minimap, top right, clear of the pause button */
+
+.map {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 66px);
+  right: calc(env(safe-area-inset-right) + 14px);
+  width: 84px;
+  height: 84px;
+}
+
+/* --- speed + boost, bottom left */
+
+.dash {
+  position: absolute;
+  left: calc(env(safe-area-inset-left) + 16px);
+  bottom: calc(env(safe-area-inset-bottom) + 18px);
+}
+.gauge { position: relative; width: 104px; height: 104px; }
+.gauge canvas { width: 104px; height: 104px; display: block; }
+.gauge-read {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-shadow: 0 2px 12px var(--shadow-ink);
+}
+#speedVal { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.gauge-read .unit {
+  margin-top: 2px;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: .14em;
+  color: rgba(255, 255, 255, .7);
+}
+
+/* --- boost, bottom right */
+
+.boost-btn {
+  position: absolute;
+  right: calc(env(safe-area-inset-right) + 18px);
+  bottom: calc(env(safe-area-inset-bottom) + 26px);
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  border: 1.5px solid var(--glass-line);
+  background: var(--glass);
+  color: rgba(255, 255, 255, .5);
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform .12s var(--ease-spring), background .18s, color .18s, box-shadow .18s;
+}
+.boost-label {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .14em;
+}
+/* Armed: there is enough in the bar for the button to do something. Anything
+   else would be a button that silently ignores a press. */
+.boost-btn.armed {
+  color: #fff;
+  border-color: rgba(255, 255, 255, .62);
+  background: rgba(255, 46, 136, .58);
+  box-shadow: 0 0 24px -8px rgba(255, 46, 136, .85);
+}
+/* A press on an empty bar has to look like a refusal. Silence on a button the
+   player deliberately pressed reads as a broken game, not as a rule. */
+.boost-btn.deny { animation: deny .28s var(--ease-out); }
+@keyframes deny {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+}
+.boost-btn.firing {
+  color: #fff;
+  background: var(--accent);
+  border-color: #fff;
+  transform: scale(.94);
+  box-shadow: 0 0 34px -6px rgba(255, 46, 136, .95);
+}
+
+/* ---------------------------------------------------------- countdown */
+
+.count {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 4;
+  font-size: 120px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: #fff;
+  text-shadow: 0 6px 40px var(--shadow-ink);
+}
+.count span {
+  display: block;
+  animation: count-pop .7s var(--ease-out) both;
+}
+.count.go span { color: var(--accent); font-size: 88px; letter-spacing: .02em; }
+@keyframes count-pop {
+  0% { opacity: 0; transform: scale(1.7); }
+  18% { opacity: 1; transform: scale(1); }
+  70% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.86); }
+}
+
+/* ---------------------------------------------------------- toasts */
+
+.toasts {
+  position: fixed;
+  top: 30%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  z-index: 3;
+}
+.toast {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #fff;
+  background: rgba(6, 26, 44, .42);
+  border: 1px solid var(--glass-line);
+  border-radius: 999px;
+  padding: 7px 17px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-shadow: 0 1px 8px var(--shadow-ink);
+  opacity: 0;
+  transform: translateY(14px) scale(.9);
+  animation: toast-in 1.5s var(--ease-out) forwards;
+}
+.toast.minor { font-size: 14px; font-weight: 700; padding: 5px 13px; }
+.toast .hot { color: var(--accent); }
+
+@keyframes toast-in {
+  0% { opacity: 0; transform: translateY(14px) scale(.9); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  75% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(.96); }
+}
+
+/* ---------------------------------------------------------- overlays */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  padding-top: calc(env(safe-area-inset-top) + 24px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+  padding-left: calc(env(safe-area-inset-left) + 24px);
+  padding-right: calc(env(safe-area-inset-right) + 24px);
+  background: linear-gradient(180deg, rgba(6, 18, 34, .35), rgba(6, 18, 34, .58));
+  z-index: 5;
+  opacity: 1;
+  transition: opacity .25s var(--ease-out);
+}
+.overlay.hidden { opacity: 0; pointer-events: none; }
+
+.panel {
+  width: min(340px, 100%);
+  max-height: 100%;
+  overflow: hidden;
+  background: rgba(14, 18, 32, .58);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  text-align: center;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 0 60px -12px rgba(255, 46, 136, .35), 0 24px 60px -20px rgba(0, 0, 0, .6);
+}
+
+.title {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(180deg, #ffffff, #ffa8cd);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hint {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+.hint-2 { font-size: 12.5px; }
+
+.cta {
+  margin-top: 20px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+.over-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.over-score {
+  font-size: 58px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.over-score.win { color: var(--accent); }
+.over-best {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.over-flag {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.result-list {
+  list-style: none;
+  margin: 16px 0 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+.result-list li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, .72);
+}
+.result-list li.me { background: rgba(255, 46, 136, .22); color: #fff; }
+.result-list .rank { width: 12px; color: var(--text-dim); }
+.result-list .chip { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.result-list .who { flex: 1; }
+.result-list .gap { font-size: 10.5px; color: var(--text-dim); }
+.result-list li.me .gap { color: rgba(255, 255, 255, .8); }
+
+/* ---------------------------------------------------------- responsive floor
+
+   844×390 and 320×568 are the two shapes that break a HUD like this one. The
+   standings are the first thing to go: eight rows down the left of a landscape
+   phone reach the boost button, and the minimap already says who is near. */
+
+@media (max-height: 620px) {
+  .standings { display: none; }
+  .map { top: calc(env(safe-area-inset-top) + 62px); width: 66px; height: 66px; }
+  .gauge, .gauge canvas { width: 84px; height: 84px; }
+  #speedVal { font-size: 23px; }
+  .boost-btn { width: 68px; height: 68px; bottom: calc(env(safe-area-inset-bottom) + 16px); }
+  .count { font-size: 84px; }
+  .panel { padding: 18px 22px; }
+  .title { font-size: 34px; }
+  .over-score { font-size: 42px; }
+  .result-list { display: none; }
+}
+
+@media (max-width: 340px) {
+  #posNum { font-size: 38px; }
+  .clock { font-size: 23px; }
+  .standings .who { min-width: 46px; }
+}
+
+/* ---------------------------------------------------------- reduced motion */
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .boost-btn { transition-duration: 1ms; }
+  /* an endless pulse at 1ms is a strobe, not a calmer version of itself */
+  .cta { animation: none; }
+  .count span { animation: none; }
+  .toast { animation-duration: 1.5s; }
+  /* the refusal still has to be visible, so it stays — it is one short shake,
+     not an ambient motion */
+  .boost-btn.deny { animation-duration: .28s; }
+}
+
+/* touch vs keyboard hints — hide the wrong one, and never restore the right
+   one to a `display` type: that would flatten a flex hint row */
+@media (hover: hover) and (pointer: fine) {
+  .if-touch { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .if-key { display: none; }
+}
+
+/* ---------------------------------------------------------- install */
+
+.install-btn {
+  margin-top: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text);
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.install-btn:active { background: rgba(255, 255, 255, .16); }
+
+.install-tip {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 20px;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 28px);
+  padding-left: calc(env(safe-area-inset-left) + 20px);
+  padding-right: calc(env(safe-area-inset-right) + 20px);
+  background: rgba(0, 0, 0, .45);
+}
+.install-tip-card {
+  background: #1e1e2a;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  max-width: 340px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+.install-tip-card svg { vertical-align: -2px; margin: 0 2px; color: var(--accent); }
+.install-tip-card button {
+  margin-top: 14px;
+  font: inherit;
+  font-weight: 700;
+  color: #2a0011;
+  background: var(--accent);
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 22px;
+  cursor: pointer;
+}
