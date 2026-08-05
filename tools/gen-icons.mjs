@@ -301,6 +301,71 @@ function wakeLayers(t) {
   ];
 }
 
+function webLayers(t) {
+  // A web corner anchored top-left, one long strand running out of it, and a
+  // figure swinging on the end of that strand. At 48px the net is what says
+  // "web" and the figure is what says "game", so the net is drawn thin and the
+  // figure is drawn as one heavy silhouette.
+  //
+  // Every shape here is fully opaque. The strands cross each other constantly,
+  // and semi-transparent shapes that overlap composite twice where they cross —
+  // a web drawn at 60% alpha comes out as a lattice of bright knots.
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  const seg = (x0, y0, x1, y1, th) => {
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1;
+    const nx = (-dy / L) * th * 0.5, ny = (dx / L) * th * 0.5;
+    return p([[x0 + nx, y0 + ny], [x1 + nx, y1 + ny], [x1 - nx, y1 - ny], [x0 - nx, y0 - ny]]);
+  };
+  const W = (a) => solid('#ffffff', a);
+  const layers = [];
+
+  // radial strands out of the corner
+  const ox = 74, oy = 74;
+  const SPOKES = [0.18, 0.52, 0.86, 1.20, 1.39];
+  for (const a of SPOKES) {
+    layers.push({ sdf: seg(ox, oy, ox + Math.cos(a) * 330, oy + Math.sin(a) * 330, 9), color: W(255) });
+  }
+  // and the arcs between them, as straight chords — at icon size a chord and an
+  // arc are the same picture, and chords keep every joint exactly on a spoke
+  for (const r of [126, 216, 306]) {
+    for (let i = 0; i < SPOKES.length - 1; i++) {
+      const a0 = SPOKES[i], a1 = SPOKES[i + 1];
+      layers.push({
+        sdf: seg(ox + Math.cos(a0) * r, oy + Math.sin(a0) * r, ox + Math.cos(a1) * r, oy + Math.sin(a1) * r, 8),
+        color: W(255),
+      });
+    }
+  }
+
+  // the strand the figure is actually on, thicker than the net
+  const hx = 322, hy = 300;
+  layers.push({ sdf: seg(ox, oy, hx, hy, 14), color: W(255) });
+
+  // figure: hands on the strand, head, torso down-forward, legs kicked back
+  //
+  // The head is a polygon rather than sdCircle because `t` is not a plain scale
+  // on the maskable icon — it maps design units through an offset as well, so
+  // `t(radius)` comes out as a screen coordinate rather than a length and the
+  // head balloons across the whole tile. Everything point-based transforms
+  // correctly either way. (The same applies to every art fn above that passes
+  // t(r) to sdCircle or sdRoundRect; their maskable icons have the same
+  // problem, which is worth fixing on its own rather than inside this one.)
+  const disc = (cx, cy, r, n = 12) => p(
+    Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2;
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    })
+  );
+  const bx = 352, by = 356;                       // hips
+  layers.push({ sdf: seg(hx, hy, bx, by, 26), color: W(255) });          // torso
+  layers.push({ sdf: disc(330, 316, 31), color: W(255) });               // head
+  layers.push({ sdf: seg(bx, by, 300, 424, 24), color: W(255) });        // near thigh
+  layers.push({ sdf: seg(300, 424, 336, 470, 20), color: W(255) });      // near shin
+  layers.push({ sdf: seg(bx, by, 404, 414, 22), color: W(255) });        // far thigh
+  layers.push({ sdf: seg(404, 414, 392, 466, 18), color: W(255) });      // far shin
+  return layers;
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -340,6 +405,9 @@ const APPS = [
   },
   {
     dir: 'games/wake', bg0: '#5c0a33', bg1: '#ff2e88', art: wakeLayers,
+  },
+  {
+    dir: 'games/web', bg0: '#101a3f', bg1: '#4f7cff', art: webLayers,
   },
 ];
 

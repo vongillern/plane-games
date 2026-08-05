@@ -1,0 +1,372 @@
+:root {
+  --bg: #0a0a0f;
+  --surface: #16161f;
+  --surface-2: #1e1e2a;
+  --text: #f5f5f7;
+  --text-dim: rgba(245, 245, 247, .55);
+  --border: rgba(255, 255, 255, .08);
+  --radius: 20px;
+  --radius-sm: 12px;
+  --ease-spring: cubic-bezier(.22, 1.2, .36, 1);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+
+  --accent: #4f7cff;
+  --accent-soft: #cfdcff;
+  --accent-deep: #2f52cc;
+  --accent-dim: rgba(79, 124, 255, .35);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Keyboard focus — visible for keys, never for a pointer tap */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---------- In-play score ---------- */
+.score {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 6vh);
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: clamp(56px, 17vw, 116px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text);
+  text-shadow: 0 2px 30px rgba(0, 0, 0, .5), 0 0 26px var(--accent-dim);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 240ms var(--ease-out);
+  z-index: 2;
+}
+
+.score.show {
+  opacity: 1;
+}
+
+.score.pop {
+  animation: score-pop 260ms var(--ease-spring);
+}
+
+@keyframes score-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.score .unit {
+  font-size: .38em;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--text-dim);
+  margin-left: .12em;
+  vertical-align: .1em;
+}
+
+/* ---------- Overlays ---------- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    calc(env(safe-area-inset-top) + 20px)
+    calc(env(safe-area-inset-right) + 20px)
+    calc(env(safe-area-inset-bottom) + 20px)
+    calc(env(safe-area-inset-left) + 20px);
+  background: radial-gradient(120% 90% at 50% 32%, rgba(6, 9, 22, .3), rgba(5, 7, 16, .78) 78%);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  z-index: 3;
+  animation: fade 300ms var(--ease-out) both;
+}
+
+.overlay[hidden] {
+  display: none;
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.overlay-card {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: rise 360ms var(--ease-spring) both;
+}
+
+@keyframes rise {
+  from { transform: translateY(12px) scale(.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.title {
+  font-size: clamp(66px, 22vw, 128px);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: .95;
+  background: linear-gradient(165deg, var(--accent-soft), var(--accent) 52%, var(--accent-deep));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 6px 34px var(--accent-dim));
+}
+
+.tagline {
+  font-size: clamp(15px, 4.6vw, 19px);
+  font-weight: 500;
+  letter-spacing: .01em;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.hint-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.key {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--text-dim);
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 70%);
+  background-color: rgba(22, 22, 31, .55);
+}
+
+/* ---------- Game over ---------- */
+.over-label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.scoreboard {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.stat {
+  min-width: 108px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 62%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.stat-value {
+  font-size: 40px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.stat-unit {
+  font-size: .45em;
+  font-weight: 700;
+  color: var(--text-dim);
+  margin-left: .1em;
+}
+
+.new-best {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--accent);
+  margin-top: -2px;
+}
+
+.new-best[hidden] {
+  display: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 30px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 130ms var(--ease-out), box-shadow 130ms var(--ease-out);
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: #08122e;
+  background: linear-gradient(165deg, var(--accent-soft), var(--accent) 58%, var(--accent-deep));
+  box-shadow: 0 0 40px -8px var(--accent-dim);
+}
+
+.restart-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+/* Landscape and SE-sized phones: the title is the first thing that has to give,
+   or the start button ends up under the fold. See DESIGN.md 6b. */
+@media (max-height: 560px) {
+  .title { font-size: clamp(44px, 13vh, 78px); }
+  .score { top: calc(env(safe-area-inset-top) + 2vh); font-size: clamp(34px, 9vh, 62px); }
+  .overlay-card { gap: 9px; }
+  .hint-row { margin-top: 4px; }
+  .install-btn { margin-top: 8px; }
+  .stat { min-width: 96px; padding: 11px 16px; }
+  .stat-value { font-size: 31px; }
+  .btn { height: 46px; margin-top: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay,
+  .overlay-card,
+  .score.pop { animation-duration: 1ms; }
+}
+
+/* Control hints: show only the variant matching the input device */
+@media (hover: hover) and (pointer: fine) {
+  .if-touch { display: none; }
+}
+@media (hover: none), (pointer: coarse) {
+  .if-key { display: none; }
+}
+
+/* ---- Install (Add to Home Screen) ---- */
+.install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 18px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color .2s var(--ease-out), border-color .2s var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+}
+.install-btn:hover { color: var(--text); border-color: rgba(255, 255, 255, .2); }
+.install-btn[hidden] { display: none; }
+
+.install-tip {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, .6);
+  animation: install-tip-in .25s var(--ease-out);
+}
+.install-tip[hidden] { display: none; }
+@keyframes install-tip-in { from { opacity: 0; } }
+
+.install-tip-card {
+  max-width: 320px;
+  padding: 22px 24px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: #16161f;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+}
+.install-tip-card svg { vertical-align: -2px; }
+.install-tip-card strong { color: var(--text); font-weight: 600; }
+.install-tip-card button {
+  margin-top: 16px;
+  padding: 10px 22px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.install-btn, .install-tip { pointer-events: auto; }

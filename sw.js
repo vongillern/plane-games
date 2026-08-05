@@ -1,6 +1,6 @@
-const CACHE = 'am-hub-v18';
+const CACHE = 'am-hub-v19';
 
-const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker', 'carve', 'sink', 'wake'];
+const GAMES = ['2048', 'drop', 'snake', 'glide', 'span', 'runway', 'hop', 'nova', 'breaker', 'carve', 'sink', 'wake', 'web'];
 const GAME_FILES = [
   '',
   'index.html',
@@ -29,6 +29,7 @@ const ASSETS = [
   './games/wake/vendor/three.module.js',
   './games/carve/rules.js',
   './games/wake/rules.js',
+  './games/web/rules.js',
   './games/span/physics.js',
   './games/span/levels.js',
 ];

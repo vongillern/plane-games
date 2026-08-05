@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <title>Web</title>
+  <meta name="theme-color" content="#0a0f22" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Swing a night city on a held thread. Fully offline." />
+
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Web" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- avoid flash of unstyled background -->
+  <style>html{background:#0a0a0f}</style>
+</head>
+<body>
+  <div class="stage" id="stage">
+    <canvas id="game"></canvas>
+
+    <!-- In-play distance -->
+    <div class="score" id="score" aria-live="polite"><span id="score-num">0</span><span class="unit">m</span></div>
+
+    <!-- Start overlay -->
+    <div class="overlay" id="start-overlay">
+      <div class="overlay-card">
+        <h1 class="title">Web</h1>
+        <p class="tagline">hold to swing, let go to fly</p>
+        <div class="hint-row if-key">
+          <span class="key">Hold click</span>
+          <span class="key">Space</span>
+        </div>
+        <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="over-overlay" hidden>
+      <div class="overlay-card">
+        <p class="over-label">Down</p>
+        <div class="scoreboard">
+          <div class="stat">
+            <span class="stat-label">Distance</span>
+            <span class="stat-value"><span id="final-score">0</span><span class="stat-unit">m</span></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Best</span>
+            <span class="stat-value"><span id="best-score">0</span><span class="stat-unit">m</span></span>
+          </div>
+        </div>
+        <p class="new-best" id="new-best" hidden>New best</p>
+        <button class="btn btn-primary" id="restart" type="button">Swing again</button>
+        <p class="restart-hint"><span class="if-touch">or hold anywhere</span><span class="if-key">Space or R to restart</span></p>
+      </div>
+    </div>
+  </div>
+
+  <div class="install-tip" id="install-tip" hidden>
+    <div class="install-tip-card">
+      <p>Install this app: tap the <strong>Share</strong> button
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      in your browser, then <strong>Add to Home Screen</strong>.</p>
+      <button id="install-tip-close" type="button">Got it</button>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

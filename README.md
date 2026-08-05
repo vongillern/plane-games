@@ -19,6 +19,7 @@ subways, and dead zones. Pure static files: no build step, no frameworks, no net
 | **Breaker** | One ball, every brick | `games/breaker/` |
 | **Sink** | Swallow the city before your rivals do (Three.js) | `games/sink/` |
 | **Wake** | Three-lap jet-ski race against seven rivals (Three.js) | `games/wake/` |
+| **Web** | Swing a night city on a held thread | `games/web/` |
 
 The hub and **each game is its own installable PWA** — visit any of them and
 "Add to Home Screen" to install just that game, or install the hub for all of them.
