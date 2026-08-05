@@ -273,6 +273,34 @@ function sinkLayers(t) {
   ];
 }
 
+function wakeLayers(t) {
+  // A ski cutting right, with the wake fanning out behind it — at 48px the
+  // wake is the shape that reads, so it gets most of the tile.
+  //
+  // Everything here is either fully opaque or a shape that overlaps nothing.
+  // Semi-transparent shapes that overlap composite twice where they cross, and
+  // a fan of soft circles turns into a string of beads.
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  const W = (a) => solid('#ffffff', a);
+  return [
+    // three spray blades opening back from the tail, none of them touching
+    { sdf: p([[212, 306], [86, 258], [24, 252], [34, 286], [204, 322]]), color: W(150) },
+    { sdf: p([[210, 330], [36, 308], [10, 328], [40, 348], [208, 344]]), color: W(190) },
+    { sdf: p([[204, 352], [92, 394], [30, 410], [30, 384], [198, 362]]), color: W(130) },
+    // hull — one opaque silhouette, nose to tail
+    { sdf: p([[124, 332], [288, 296], [400, 306], [418, 330], [358, 360], [146, 360]]), color: W(255) },
+    // rider: back, shoulders, the arm down to the bars, and the front, drawn as
+    // a single outline so no seam can show through the middle of the figure
+    { sdf: p([[242, 306], [266, 212], [298, 204], [316, 220], [358, 266], [342, 288], [300, 252], [292, 306]]), color: W(255) },
+    { sdf: sdCircle(t(302), t(176), t(27)), color: W(255) },
+    // hair, streaming back
+    { sdf: p([[280, 172], [236, 146], [220, 172], [272, 198]]), color: W(255) },
+    // bow spray
+    { sdf: sdCircle(t(432), t(292), t(19)), color: W(255) },
+    { sdf: sdCircle(t(460), t(258), t(11)), color: W(200) },
+  ];
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -309,6 +337,9 @@ const APPS = [
   },
   {
     dir: 'games/sink', bg0: '#4a0d10', bg1: '#ef4444', art: sinkLayers,
+  },
+  {
+    dir: 'games/wake', bg0: '#5c0a33', bg1: '#ff2e88', art: wakeLayers,
   },
 ];
 

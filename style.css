@@ -132,6 +132,7 @@ h1 {
   .card-breaker:hover { box-shadow: 0 0 40px -10px rgba(249, 115, 22, .35); }
   .card-carve:hover { box-shadow: 0 0 40px -10px rgba(45, 212, 191, .35); }
   .card-sink:hover { box-shadow: 0 0 40px -10px rgba(239, 68, 68, .35); }
+  .card-wake:hover { box-shadow: 0 0 40px -10px rgba(255, 46, 136, .35); }
   .card:hover .chevron { transform: translate(3px, -1px); color: var(--text); }
 }
 

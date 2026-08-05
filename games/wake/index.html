@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en" style="background:#0a0a0f">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Wake</title>
+  <meta name="theme-color" content="#1a0b18" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Wake" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- The race HUD. Hidden on the start and results screens so nothing floats
+       on top of "tap to race" — see the responsive floor in DESIGN.md. -->
+  <div id="hud" class="hud" hidden>
+    <div class="hud-top">
+      <div class="pos-block">
+        <div class="pos"><span id="posNum">8</span><span class="pos-of">/<span id="posOf">8</span></span></div>
+        <div class="pos-label">position</div>
+      </div>
+      <div class="clock-block">
+        <div id="clock" class="clock" aria-live="off">00:00.00</div>
+        <div class="lap">LAP <span id="lapNum">1</span>/<span id="lapTotal">3</span></div>
+        <div class="best-lap">BEST LAP <span id="bestLap">--:--.--</span></div>
+      </div>
+    </div>
+
+    <ol id="standings" class="standings" aria-label="Race order"></ol>
+
+    <canvas id="map" class="map" aria-hidden="true"></canvas>
+
+    <div class="dash">
+      <div class="gauge">
+        <canvas id="gauge" aria-hidden="true"></canvas>
+        <div class="gauge-read"><span id="speedVal">0</span><span class="unit">km/h</span></div>
+      </div>
+    </div>
+
+    <button id="boostBtn" class="boost-btn" type="button" aria-label="Boost">
+      <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+        <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" fill="currentColor"/>
+      </svg>
+      <span class="boost-label">BOOST</span>
+    </button>
+  </div>
+
+  <div id="count" class="count" aria-live="assertive"></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <div id="start" class="overlay">
+    <div class="panel">
+      <h1 class="title">Wake</h1>
+      <p class="hint">
+        <span class="if-touch">drag to steer &nbsp;·&nbsp; hold BOOST to burn it</span><span class="if-key">← → to steer &nbsp;·&nbsp; hold Space to boost</span><br>
+        <span class="hint-2">three laps, eight skis, and you start at the back<br>
+        sit in a rival's wake to fill the bar &nbsp;·&nbsp; air off a swell fills it too</span>
+      </p>
+      <div class="cta"><span class="if-touch">tap to race</span><span class="if-key">press Space to race</span></div>
+      <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="panel">
+      <p class="over-label" id="overLabel">finished</p>
+      <div id="overPos" class="over-score">3rd</div>
+      <p class="over-best">
+        <span id="overTime">00:00.00</span> · best lap <span id="overLap">--:--.--</span>
+        <span id="overFlag" class="over-flag" hidden>new best lap</span>
+      </p>
+      <ol id="overList" class="result-list"></ol>
+      <div class="cta"><span class="if-touch">tap to race again</span><span class="if-key">press Space to race again</span></div>
+    </div>
+  </div>
+
+  <div class="install-tip" id="install-tip" hidden>
+    <div class="install-tip-card">
+      <p>Install this app: tap the <strong>Share</strong> button
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      in your browser, then <strong>Add to Home Screen</strong>.</p>
+      <button id="install-tip-close" type="button">Got it</button>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>
