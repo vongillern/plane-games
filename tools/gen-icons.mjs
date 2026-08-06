@@ -301,6 +301,29 @@ function wakeLayers(t) {
   ];
 }
 
+function webLayers(t) {
+  // a figure mid-arc, hanging off a line strung to the tower behind it
+  const p = (pts) => sdPolygon(pts.map(([x, y]) => [t(x), t(y)]));
+  return [
+    // the towers are what you swing between, not the subject — so they sit back
+    { sdf: sdRoundRect(t(88), t(410), t(52), t(150), t(7)), color: solid('#ffffff', 62) },
+    { sdf: sdRoundRect(t(424), t(368), t(56), t(190), t(7)), color: solid('#ffffff', 92) },
+    // the arc already travelled
+    { sdf: p([[132, 470], [178, 442], [220, 396], [238, 404], [196, 456], [146, 486]]), color: solid('#ffffff', 78) },
+    // the line, anchored high on the right tower
+    { sdf: p([[388, 178], [398, 188], [282, 320], [272, 310]]), color: solid('#ffffff', 215) },
+    // the arm goes up the line; keeping it thin is what stops the figure
+    // reading as one blob at 192px, where the whole icon is 40 units wide
+    { sdf: p([[248, 356], [272, 312], [286, 322], [262, 366]]), color: solid('#ffffff') },
+    { sdf: sdCircle(t(212), t(330), t(26)), color: solid('#ffffff') },
+    // torso, leaning into the arc
+    { sdf: p([[204, 356], [242, 348], [262, 410], [228, 422]]), color: solid('#ffffff') },
+    // both legs kicked back through the bottom of the swing
+    { sdf: p([[232, 414], [258, 404], [214, 462], [196, 452]]), color: solid('#ffffff') },
+    { sdf: p([[240, 418], [262, 412], [238, 480], [220, 474]]), color: solid('#ffffff', 225) },
+  ];
+}
+
 const APPS = [
   {
     dir: '.', bg0: '#2a1e66', bg1: '#7c5cff', art: planeLayers,
@@ -340,6 +363,9 @@ const APPS = [
   },
   {
     dir: 'games/wake', bg0: '#5c0a33', bg1: '#ff2e88', art: wakeLayers,
+  },
+  {
+    dir: 'games/web', bg0: '#191c4d', bg1: '#6366f1', art: webLayers,
   },
 ];
 

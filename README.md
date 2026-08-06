@@ -19,6 +19,7 @@ subways, and dead zones. Pure static files: no build step, no frameworks, no net
 | **Breaker** | One ball, every brick | `games/breaker/` |
 | **Sink** | Swallow the city before your rivals do (Three.js) | `games/sink/` |
 | **Wake** | Three-lap jet-ski race against seven rivals (Three.js) | `games/wake/` |
+| **Web** | Swing the city, beacon to beacon (Three.js) | `games/web/` |
 
 The hub and **each game is its own installable PWA** — visit any of them and
 "Add to Home Screen" to install just that game, or install the hub for all of them.
@@ -65,6 +66,7 @@ node tools/check.mjs         # the invariants DESIGN.md promises, read from sour
 node tools/span-physics.mjs  # games/span/physics.js — are the levels still solvable?
 node tools/carve-rules.mjs   # games/carve/rules.js — tricks, collisions, speed
 node tools/wake-rules.mjs    # games/wake/rules.js — the course, laps, boost, water
+node tools/web-rules.mjs     # games/web/rules.js — the raycast, the aim assist, the swing
 node tools/smoke.mjs         # every app in a real browser, then with the network cut
 ```
 
