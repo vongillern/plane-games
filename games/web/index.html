@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" style="background:#0a0a0f">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Web</title>
+  <meta name="theme-color" content="#0d1030" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Web" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- The run HUD. Hidden on the start and results screens so nothing floats
+       on top of "tap to swing" — see the responsive floor in DESIGN.md. -->
+  <div id="hud" class="hud" hidden>
+    <div class="hud-top">
+      <div class="clock-block">
+        <div id="clock" class="clock" aria-live="off">0:30.0</div>
+        <div class="clock-label">seconds left</div>
+      </div>
+      <div class="reach-block">
+        <div class="reach"><span id="reachNum">0</span></div>
+        <div class="reach-label">reached</div>
+      </div>
+    </div>
+
+    <!-- Off-screen beacons need an arrow; a target you cannot see and cannot
+         find is just a countdown running out for no reason. -->
+    <div id="pointer" class="pointer" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="30" height="30"><path d="M12 3 4 20l8-5 8 5z" fill="currentColor"/></svg>
+      <span id="pointerDist" class="pointer-dist">0m</span>
+    </div>
+
+    <div class="dash">
+      <div class="speed"><span id="speedVal">0</span><span class="unit">km/h</span></div>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <div id="start" class="overlay">
+    <div class="panel">
+      <h1 class="title">Web</h1>
+      <p class="hint">
+        <span class="if-touch">hold to web &nbsp;·&nbsp; drag to aim &nbsp;·&nbsp; let go to fly</span><span class="if-key">hold Space to web &nbsp;·&nbsp; ← → to aim</span><br>
+        <span class="hint-2">reach the beacon before the clock runs out<br>
+        every one you reach buys you more time &nbsp;·&nbsp; hold longer and the web casts wider</span>
+      </p>
+      <div class="cta"><span class="if-touch">tap to swing</span><span class="if-key">press Space to swing</span></div>
+      <button class="install-btn" id="install" type="button" hidden><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Add to Home Screen</span></button>
+    </div>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <div class="panel">
+      <p class="over-label">out of time</p>
+      <div id="overScore" class="over-score">0</div>
+      <p class="over-sub">beacons reached</p>
+      <p class="over-best">
+        best <span id="overBest">0</span> · <span id="overDist">0</span> km swung
+        <span id="overFlag" class="over-flag" hidden>new best</span>
+      </p>
+      <div class="cta"><span class="if-touch">tap to swing again</span><span class="if-key">press Space to swing again</span></div>
+    </div>
+  </div>
+
+  <div class="install-tip" id="install-tip" hidden>
+    <div class="install-tip-card">
+      <p>Install this app: tap the <strong>Share</strong> button
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 3v12M12 3 8 7m4-4 4 4M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      in your browser, then <strong>Add to Home Screen</strong>.</p>
+      <button id="install-tip-close" type="button">Got it</button>
+    </div>
+  </div>
+
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

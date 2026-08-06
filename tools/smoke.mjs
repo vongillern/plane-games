@@ -1001,6 +1001,192 @@ await phase('wake: a full three-lap race', async () => {
   }
 });
 
+// --- 9. Web: a whole run ----------------------------------------------------
+//
+// The swing is the game, and almost none of it is reachable by waiting: a run
+// is thirty seconds long and every interesting moment is a web catching or a
+// beacon being reached. `window.__test` freezes rAF so this drives the real
+// simulation at a fixed dt — a full run takes a few hundred milliseconds.
+//
+// tools/web-rules.mjs already proves the physics in isolation. What can only
+// break here is the wiring: an anchor the renderer never draws, a clock the HUD
+// disagrees with, a beacon that is reached but never counted.
+await phase('web: a whole run', async () => {
+  const ctx = await browser.newContext();
+  try {
+    const page = await ctx.newPage();
+    const log = watch(page);
+    await page.goto(`${BASE}/games/web/`, { waitUntil: 'load' });
+    await settle(page, 400);
+
+    // --- the run ends on its own, and on the clock -------------------------
+    const run = await page.evaluate(() => {
+      const t = window.__test;
+      t.freeze(true); t.start(); t.autopilot(true);
+      const started = t.state;
+      let steps = 0, airborne = 0, attached = 0, maxSpeed = 0, minY = Infinity;
+      // a cap far past any plausible run, so a game that never ends fails here
+      // rather than hanging the suite
+      while (t.state === 'swinging' && steps < 30000) {
+        t.step(1 / 60, 5); steps += 5;
+        if (!t.player.grounded) airborne += 5;
+        if (t.attached) attached += 5;
+        maxSpeed = Math.max(maxSpeed, Math.hypot(t.player.vx, t.player.vy, t.player.vz));
+        minY = Math.min(minY, t.player.y);
+      }
+      return {
+        started, state: t.state, steps, reached: t.reached, timeLeft: t.timeLeft,
+        airborne: airborne / steps, attached: attached / steps, maxSpeed, minY,
+        finite: Number.isFinite(t.player.x + t.player.y + t.player.z),
+      };
+    });
+
+    check('web/run', 'the first tap starts a run', run.started === 'swinging', show(run.started));
+    check('web/run', 'the run ends on its own', run.state === 'over', show(run.state));
+    check('web/run', 'and it ends because the clock ran out', run.timeLeft === 0, show(run.timeLeft));
+    check('web/run', 'a run lasts longer than the clock it started with',
+      run.steps / 60 > 30, `${(run.steps / 60).toFixed(1)} s`);
+    check('web/run', 'which means beacons were actually reached', run.reached > 0, show(run.reached));
+    check('web/run', 'the player never falls through the street', run.minY > 0, show(run.minY));
+    check('web/run', 'nothing goes non-finite', run.finite === true, show(run.finite));
+    check('web/run', 'the run is spent swinging, not walking',
+      run.airborne > 0.9, `${(run.airborne * 100).toFixed(0)}% airborne`);
+    // The web is out for a good part of the run but never all of it — always
+    // attached would mean release is broken, never attached would mean the
+    // whole aim assist is unwired from the game.
+    check('web/run', 'the web spends real time attached',
+      run.attached > 0.2 && run.attached < 0.95, `${(run.attached * 100).toFixed(0)}%`);
+    check('web/run', 'and the swing reaches a plausible speed',
+      run.maxSpeed > 25 && run.maxSpeed < 130, `${run.maxSpeed.toFixed(1)} m/s`);
+
+    // --- webs attach to the city, never to the sky -------------------------
+    // The one thing this game exists to do. A hold from a rooftop must find a
+    // real surface; a hold from high above the skyline must find nothing.
+    const anchors = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.autopilot(false);
+      let caught = 0, tries = 0, onSurface = 0;
+      // Below the median rooftop on purpose: above the skyline there is
+      // genuinely nothing to grab, and a probe that samples up there is
+      // measuring the city's height distribution rather than the aim assist.
+      for (let k = 0; k < 24; k++) {
+        t.teleport(k * 140 - 1400, 34, k * 90 - 700, 40);
+        t.hold(true);
+        tries++;
+        for (let i = 0; i < 40 && !t.attached; i++) t.step(1 / 60, 1);
+        if (t.attached) {
+          caught++;
+          const a = t.anchor;
+          // an anchor has to be a real point above the player, within reach
+          const d = Math.hypot(a.x - t.player.x, a.y - t.player.y, a.z - t.player.z);
+          if (a.y > t.player.y && d <= t.rules.MAX_LEN + 1) onSurface++;
+        }
+        t.hold(false);
+      }
+      // now from far above every rooftop in the city
+      t.teleport(0, 1400, 0, 40);
+      t.hold(true);
+      for (let i = 0; i < 60; i++) t.step(1 / 60, 1);
+      const inTheSky = t.attached;
+      t.hold(false);
+      return { caught, tries, onSurface, inTheSky };
+    });
+    check('web/anchor', 'holding in the city almost always catches something',
+      anchors.caught >= anchors.tries - 2, `${anchors.caught} of ${anchors.tries}`);
+    check('web/anchor', 'every anchor is a real point above the player and in reach',
+      anchors.onSurface === anchors.caught, `${anchors.onSurface} of ${anchors.caught}`);
+    check('web/anchor', 'a web fired above the skyline attaches to nothing',
+      anchors.inTheSky === false, show(anchors.inTheSky));
+
+    // --- nothing ever stops the player -------------------------------------
+    // The promise the whole design rests on: there is no crash and no reset,
+    // so a wall costs speed and a street costs a little more, and neither ends
+    // the run.
+    const wall = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.autopilot(false); t.hold(false);
+      // fly flat into the middle of the city and keep going
+      t.teleport(0, 40, -600, 60);
+      t.step(1 / 60, 240);
+      const afterWalls = { speed: Math.hypot(t.player.vx, t.player.vz), state: t.state };
+      // and put him on the pavement
+      t.teleport(0, 3, 0, 30);
+      t.step(1 / 60, 180);
+      return { afterWalls, ground: Math.hypot(t.player.vx, t.player.vz), state: t.state, y: t.player.y };
+    });
+    check('web/contact', 'flying into the city does not stop the player',
+      wall.afterWalls.speed > 1, `${wall.afterWalls.speed.toFixed(2)} m/s`);
+    check('web/contact', '...and it is not a crash — the run carries on',
+      wall.afterWalls.state === 'swinging', show(wall.afterWalls.state));
+    check('web/contact', 'he lands on the street and runs rather than stopping',
+      wall.ground > 1, `${wall.ground.toFixed(2)} m/s`);
+    check('web/contact', 'and he stays on top of it', wall.y > 0, show(wall.y));
+
+    // --- the HUD agrees with the simulation --------------------------------
+    const hud = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.autopilot(true);
+      t.step(1 / 60, 300);
+      t.paint();
+      return {
+        clock: document.getElementById('clock').textContent,
+        reached: document.getElementById('reachNum').textContent,
+        speed: Number(document.getElementById('speedVal').textContent),
+        hudHidden: document.getElementById('hud').hidden,
+        realReached: t.reached,
+        realSpeed: Math.round(Math.hypot(t.player.vx, t.player.vy, t.player.vz) * 3.6),
+        realTime: t.timeLeft,
+      };
+    });
+    check('web/hud', 'the HUD is up during a run', hud.hudHidden === false, show(hud.hudHidden));
+    check('web/hud', 'the speed on screen is the speed in the simulation',
+      hud.speed === hud.realSpeed, `${hud.speed} vs ${hud.realSpeed}`);
+    check('web/hud', 'the beacon count on screen is the real one',
+      hud.reached === String(hud.realReached), `${hud.reached} vs ${hud.realReached}`);
+    check('web/hud', 'the clock on screen is the clock that ends the run',
+      hud.clock === `0:${hud.realTime < 10 ? '0' : ''}${hud.realTime.toFixed(1)}`
+        || hud.clock.startsWith(`${Math.floor(hud.realTime / 60)}:`),
+      `${hud.clock} vs ${hud.realTime.toFixed(1)}`);
+
+    // --- the cone widens while the button is held --------------------------
+    // The accessibility mechanic the whole aim assist rests on. If it stops
+    // widening the game still runs, and stops being playable by anyone who
+    // cannot already place a rope in three dimensions.
+    const cone = await page.evaluate(() => {
+      const t = window.__test;
+      return { tap: t.coneSpread(0), half: t.coneSpread(0.22), held: t.coneSpread(0.45) };
+    });
+    check('web/cone', 'a tap is a narrow cone', cone.tap < 0.1, show(cone.tap));
+    check('web/cone', 'and it widens the longer the button is held',
+      cone.held > cone.half && cone.half > cone.tap, show(cone));
+
+    // --- the results card tells the truth ----------------------------------
+    const over = await page.evaluate(() => {
+      const t = window.__test;
+      t.start(); t.autopilot(true);
+      let steps = 0;
+      while (t.state === 'swinging' && steps < 30000) { t.step(1 / 60, 10); steps += 10; }
+      return {
+        shown: !document.getElementById('over').classList.contains('hidden'),
+        score: document.getElementById('overScore').textContent,
+        hudHidden: document.getElementById('hud').hidden,
+        real: t.reached,
+      };
+    });
+    check('web/over', 'the results card appears when the clock runs out', over.shown === true);
+    check('web/over', 'it shows the beacons actually reached',
+      over.score === String(over.real), `${over.score} vs ${over.real}`);
+    check('web/over', 'and the HUD gets out of the way of "tap to swing again"',
+      over.hudHidden === true, show(over.hudHidden));
+
+    check('web/errors', 'no uncaught page errors through all of it',
+      log.pageErrors.length === 0, show(log.pageErrors));
+    check('web/errors', 'and no console errors', log.consoleErrors.length === 0, show(log.consoleErrors));
+  } finally {
+    await ctx.close();
+  }
+});
+
 // ---------------------------------------------------------------------------
 
 await browser.close();
